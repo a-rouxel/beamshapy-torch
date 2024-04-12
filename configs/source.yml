@@ -1,4 +1,4 @@
-beam :
-  type: gaussian mixture
-  num gaussian: 1
-  wavelength: 850
+type: gaussian mixture
+num gaussian: 1
+wavelength: 850
+power: 1000000  # in uW
