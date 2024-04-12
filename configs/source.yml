@@ -1,0 +1,8 @@
+beam :
+  type: Gaussian Mixture
+  num gaussian: 1
+  waist: 4.3
+  wavelength: 850
+  LG: False
+  n: 0
+  m: 0
