@@ -18,9 +18,12 @@ class Source(nn.Module):
         self.XY_grid = XY_grid
 
         self.weights = nn.Parameter(torch.tensor([1.0] * self.num_gaussians))
+        self.weights.requires_grad = False
         self.means = nn.Parameter(torch.zeros(self.num_gaussians, 2) * mm)
-        self.sigma = nn.Parameter(torch.tensor([1 / 2] * self.num_gaussians) * mm)
-        self.phase = nn.Parameter(torch.zeros(XY_grid[0].shape))  # Random phase for each Gaussian
+        self.means.requires_grad = False
+        self.sigma = nn.Parameter(torch.tensor([1.3 / 2] * self.num_gaussians) * mm)
+        self.phase = nn.Parameter(torch.zeros(XY_grid[0].shape))
+        self.phase.requires_grad = False
 
         self.generate_electric_field()
 

@@ -1,5 +1,7 @@
 import torch
-
+from helpers import load_yaml_config
+from units import *
+from electric_field import ElectricField
 
 def generate_profile(profile_type, XY_grid,radius=None, parabola_coef=None,angle=0,width=None, height=None, position=(0, 0), period=None, phase_offset=0):
 
@@ -109,4 +111,29 @@ def SinusMask(XY_grid, period, angle, phase_offset=0):
 
     mask = torch.sin(2 * torch.pi * rotated_X / period + phase_offset)
     return mask
+
+
+def generate_target_profiles(yaml_file,XY_grid,list_modes_nb=[]):
+
+    config = load_yaml_config(yaml_file)
+
+    width = config["width"]*um
+    height = config["height"]*um
+
+
+    list_target_profiles = []
+    for mode_nb in list_modes_nb:
+        if mode_nb %2 == 0:
+            phase_offset = torch.pi/2
+        else:
+            phase_offset = 0
+        sinus_period = 2* height / (1+mode_nb)
+
+        target_field = generate_profile("Rectangle",XY_grid,width=width,height=height)
+        target_field *= generate_profile("Sinus",XY_grid,period=sinus_period,phase_offset=phase_offset)
+
+        target_field = ElectricField(torch.abs(target_field), torch.angle(target_field), XY_grid)
+        list_target_profiles.append(target_field.field)
+
+    return list_target_profiles
 

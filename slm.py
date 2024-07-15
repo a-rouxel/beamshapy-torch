@@ -1,5 +1,7 @@
 import torch
 from torch import nn
+from cost_functions import generalized_sigmoid_function
+import matplotlib.pyplot as plt
 
 class SLM(nn.Module):
 
@@ -13,17 +15,17 @@ class SLM(nn.Module):
 
         self.generate_initial_phase()
         self.generate_initial_amplitude()
-    
+
     def generate_initial_phase(self):
 
         if self.initial_phase is not None:
-            self.phase = nn.Parameter(torch.tensor(self.initial_phase))
+            self.phase_parameters = nn.Parameter(torch.tensor(self.initial_phase))
         
         elif self.config_dict["initial phase"] == "random":
-            self.phase = nn.Parameter(torch.rand(self.XY_grid[0].shape))
-        
+            self.phase_parameters = nn.Parameter(2*torch.rand(self.XY_grid[0].shape)-1)
+
         elif self.config_dict["initial phase"] == "zero":
-            self.phase = nn.Parameter(torch.zeros(self.XY_grid[0].shape))
+            self.phase_parameters = nn.Parameter(torch.zeros(self.XY_grid[0].shape))
 
         elif self.config_dict["initial phase"] == "custom":
             raise("Custom phase should be implemented")
@@ -38,3 +40,30 @@ class SLM(nn.Module):
 
         elif self.config_dict["initial amplitude"] == "custom":
             raise("Custom amplitude should be implemented")
+
+
+    def apply_phase_modulation(self, input_field,beta=1.0,mapping=True,parity=0):
+          # self.phase = 0.5*torch.pi* (torch.tanh(beta*self.phase_parameters))
+        if mapping:
+            if parity == 0:
+                self.phase = 2*torch.pi*torch.sigmoid(beta*self.phase_parameters)
+            else:
+                self.phase = torch.pi*torch.sigmoid(beta*self.phase_parameters) - torch.pi/2
+        else :
+            self.phase = self.phase_parameters
+
+        return torch.abs(input_field) * torch.exp(1j * self.phase)
+
+    def apply_phase_modulation_sigmoid(self, input_field,steepness=20,num_terms=3, spacing=0.5,mode_parity="even"):
+
+        self.phase = generalized_sigmoid_function(self.phase_parameters,
+                                                  steepness=steepness,
+                                                  num_terms=num_terms,
+                                                  spacing=spacing,
+                                                  mode_parity=mode_parity)
+
+        return torch.abs(input_field) * torch.exp(1j * self.phase)
+    def apply_amplitude_modulation(self, input_field):
+          amplitude_input = torch.abs(input_field)
+          modulated_amplitude = amplitude_input * self.amplitude
+          return modulated_amplitude * torch.exp(1j * torch.angle(input_field))

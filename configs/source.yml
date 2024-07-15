@@ -1,4 +1,4 @@
 type: gaussian mixture
 num gaussian: 1
 wavelength: 850
-power: 1000000  # in uW
+power: 100000000  # in uW

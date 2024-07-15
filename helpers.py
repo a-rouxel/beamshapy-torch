@@ -2,7 +2,6 @@ import os
 import yaml
 
 
-
 def load_yaml_config(file_path):
     """
     Load a YAML configuration file.
