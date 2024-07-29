@@ -80,6 +80,7 @@ class OpticalSystem(pl.LightningModule):
 
     def forward(self, x):
 
+        input_field = x.detach().cpu()
         modulated_field = self.slm.apply_phase_modulation_sigmoid(x,steepness=2 + self.current_epoch/200,num_terms=1, spacing=1,mode_parity=self.mode_parity)
 
         self.out_field = self.ft_lens(modulated_field, pad=False, flag_ifft=False)
@@ -134,7 +135,7 @@ class OpticalSystem(pl.LightningModule):
         list_overlap_tmp.pop(self.target_mode)
 
 
-        # loss += -10 * torch.log(1 - torch.max(torch.stack(list_overlap_tmp)))
+        loss += -10 * torch.log(1 - torch.max(torch.stack(list_overlap_tmp)))
 
 
         # if loss == Nane
@@ -153,10 +154,11 @@ class OpticalSystem(pl.LightningModule):
         diff_dim0_padded = F.pad(diff_dim0, (0, 0, 0, 1), 'constant', 0)
         diff_dim1_padded = F.pad(diff_dim1, (0, 1, 0, 0), 'constant', 0)
 
+
         # Now you can add the padded tensors together since they match in size
         TV_term = torch.sum(torch.sqrt(diff_dim0_padded + diff_dim1_padded + 1e-2))
 
-        loss += TV_term*1e-5
+        loss += TV_term*1e-5* (50/(self.current_epoch+1))
         # loss +=  -1 * torch.log(self.inside_energy_percentage + 1e-10)
 
         return loss, list_overlaps
@@ -242,7 +244,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 
 device = "gpu"
 
-for try_nb in range(2):
+for try_nb in range(1):
     for i in range(9):
 
         model = OpticalSystem(log_dir="./lightning_logs",device=device,target_mode_nb=i,try_nb=try_nb)
@@ -261,7 +263,7 @@ for try_nb in range(2):
         trainer = pl.Trainer(
         enable_progress_bar = True, # for turning off progress bar
         enable_model_summary= True, # for turning off weight summary.
-        max_epochs          = 12000,
+        max_epochs          = 5000,
         enable_checkpointing= False,
         profiler            = None,
         logger              = None,

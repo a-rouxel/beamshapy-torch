@@ -21,7 +21,7 @@ class Source(nn.Module):
         self.weights.requires_grad = False
         self.means = nn.Parameter(torch.zeros(self.num_gaussians, 2) * mm)
         self.means.requires_grad = False
-        self.sigma = nn.Parameter(torch.tensor([1.3 / 2] * self.num_gaussians) * mm)
+        self.sigma = nn.Parameter(torch.tensor([1.3] * self.num_gaussians) * mm)
         self.phase = nn.Parameter(torch.zeros(XY_grid[0].shape))
         self.phase.requires_grad = False
 
@@ -38,13 +38,15 @@ class Source(nn.Module):
             diff_x = (x - means_x) ** 2
             diff_y = (y - means_y) ** 2
             sigma_squared = self.sigma[i] ** 2
-            exponent = -0.5 * (diff_x + diff_y) / sigma_squared
+            exponent = - (diff_x + diff_y) / sigma_squared
             two_pi_tensor = torch.tensor(2 * torch.pi, dtype=torch.float32, device=x.device)
-            prefac = 1 / (self.sigma[i] * torch.sqrt(two_pi_tensor))
-            amplitude += prefac * torch.exp(exponent)
-        
-        current_power = amplitude.sum()
-        amplitude *= (self.initial_power / current_power)
+            # prefac = 1 / (self.sigma[i] * torch.sqrt(two_pi_tensor))
+            amplitude += torch.exp(exponent)
+
+        intensity = amplitude ** 2
+        current_power = intensity.sum()
+        # amplitude *= (self.initial_power / current_power)
+        amplitude = torch.sqrt(intensity*(self.initial_power / current_power))
         return amplitude
     
     def generate_electric_field(self):

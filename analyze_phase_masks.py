@@ -27,7 +27,19 @@ def hypergaussian_weights(XY_grid, x_center, y_center, sigma_x, sigma_y, order):
     weight_map /= weight_map.sum()  # Normalize the weights to sum to 1
     return weight_map
 
+def compute_loss_no_weights(out_field, list_target_field):
 
+    list_overlaps = []
+
+    for idx, target_field in enumerate(list_target_field):
+
+        overlap = calculate_normalized_overlap(out_field, target_field)
+
+
+        list_overlaps.append(overlap)
+
+
+    return list_overlaps
 def compute_loss(out_field, list_target_field,weights_map):
     energy_out = torch.sum(torch.sum(torch.abs(out_field)))
 
@@ -66,7 +78,7 @@ config_slm = load_yaml_config("./configs/SLM.yml")
 config_simulation = load_yaml_config("./configs/simulation.yml")
 
 
-i = 5
+i = 2
 
 if i%2 == 0:
     mode_parity = "even"
@@ -103,7 +115,7 @@ target_field = list_target_fields[i]
 # Simulate field modulation for both original and quantized phases
 for phase_type, phase_data in [("Original", phase), ("Quantized", quantized_phase)]:
 
-    path_partage_photo = "/net/cubitus/projects/Partage_PHOTO/Projets_en_cours/ANR RESON/Echantillons/XB-FBINA-22/optimized_masks/"
+    # path_partage_photo = "/net/cubitus/projects/Partage_PHOTO/Projets_en_cours/ANR RESON/Echantillons/XB-FBINA-22/optimized_masks/"
 
     # np.save(f"{path_partage_photo}best_slm_phase_{i}_{try_nb}.npy", phase_data.cpu().detach().numpy())
     plt.imshow(phase_data.cpu().detach().numpy())
