@@ -15,13 +15,15 @@ class Source(nn.Module):
         self.num_gaussians = self.config_dict["num gaussian"]
         self.wavelength = self.config_dict["wavelength"]*nm
         self.initial_power = self.config_dict["power"]
+        self.init_amp = 1
         self.XY_grid = XY_grid
 
-        self.weights = nn.Parameter(torch.tensor([1.0] * self.num_gaussians))
-        self.weights.requires_grad = False
+        self.amplitudes = nn.Parameter(torch.ones(self.num_gaussians) / (self.num_gaussians) * self.init_amp)
+        self.amplitudes.requires_grad = False
         self.means = nn.Parameter(torch.zeros(self.num_gaussians, 2) * mm)
         self.means.requires_grad = False
-        self.sigma = nn.Parameter(torch.tensor([1.3] * self.num_gaussians) * mm)
+        self.sigmas = nn.Parameter(torch.ones(self.num_gaussians) * 1.3 * mm)
+        self.sigmas.requires_grad = False
         self.phase = nn.Parameter(torch.zeros(XY_grid[0].shape))
         self.phase.requires_grad = False
 
@@ -37,16 +39,16 @@ class Source(nn.Module):
             means_y = self.means[i, 1].expand_as(y)
             diff_x = (x - means_x) ** 2
             diff_y = (y - means_y) ** 2
-            sigma_squared = self.sigma[i] ** 2
+            sigma_squared = self.sigmas[i] ** 2
             exponent = - (diff_x + diff_y) / sigma_squared
-            two_pi_tensor = torch.tensor(2 * torch.pi, dtype=torch.float32, device=x.device)
+            # two_pi_tensor = torch.tensor(2 * torch.pi, dtype=torch.float32, device=x.device)
             # prefac = 1 / (self.sigma[i] * torch.sqrt(two_pi_tensor))
-            amplitude += torch.exp(exponent)
-
-        intensity = amplitude ** 2
-        current_power = intensity.sum()
+            amplitude_idx = torch.exp(exponent)*self.amplitudes[i]
+            amplitude += amplitude_idx
+        # intensity = amplitude ** 2
+        # current_power = intensity.sum()
         # amplitude *= (self.initial_power / current_power)
-        amplitude = torch.sqrt(intensity*(self.initial_power / current_power))
+        # amplitude = torch.sqrt(intensity*(self.initial_power / current_power))
         return amplitude
     
     def generate_electric_field(self):
