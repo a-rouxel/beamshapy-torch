@@ -3,8 +3,25 @@ import yaml
 from functions_basic_shapes import *
 import torch
 from scipy.optimize import brentq
-
+import time
 nm = 1e-9
+
+def resample_intensity(intensity, XY_grid_target, XY_grid_source):
+    """
+    Resample the intensity to the target grid.
+
+    Parameters:
+    - intensity (np.ndarray): Intensity to be resampled.
+    - XY_grid_target (np.ndarray): Target grid.
+    - XY_grid_source (np.ndarray): Source grid.
+
+    Returns:
+    - np.ndarray: Resampled intensity.
+    """
+    # Resample the intensity to the target grid
+    intensity_resampled = np.interp(XY_grid_target, XY_grid_source, intensity)
+
+    return intensity_resampled
 
 def wrap_phase(phase):
     """
@@ -179,6 +196,69 @@ def generate_target_mask(inverse_fourier_target_field,mask_type,input_field=None
     else:
         print("mask_type not recognized")
         return None
+
+def generate_sin_flatop(simulation, ft_lens, source,width, height, period, phase_offset=0, angle=0, center_x=0, center_y=0):
+
+        angle *= np.pi / 180
+        t0 = time.time()
+        target_amplitude = generate_target_amplitude(simulation.XY_grid, ft_lens.XY_output_grid, source.wavelength,ft_lens.focal_length,
+                                                    amplitude_type="Rectangle",
+                                                     width=width,
+                                                     height=height)
+        t1 = time.time()
+        print("Time to generate target amplitude 1 : ", t1 - t0)
+
+        target_amplitude *= generate_target_amplitude(simulation.XY_grid, ft_lens.XY_output_grid, source.wavelength,
+                                                      ft_lens.focal_length,
+                                                      amplitude_type="Sinus",
+                                                      period=period,
+                                                    angle=(90 * np.pi / 180 + angle),
+                                                      phase_offset=phase_offset)
+
+        t2 = time.time()
+        print("Time to generate target amplitude 2 : ", t2 - t1)
+
+        inverse_fourier_transform = ft_lens(target_amplitude, pad=False, flag_ifft=True)
+
+        t3 = time.time()
+        print("Time to inverse fourier transform : ", t3 - t2)
+
+        if center_x != 0:
+            angle_rad = np.tan(center_y / center_x)
+        else:
+            angle_rad = 0
+        position = np.sqrt(center_x ** 2 + center_y ** 2)
+
+        # mask_wedge = self.beam_shaper.generate_mask(mask_type="Wedge",
+        #                                             angle=angle_rad,
+        #                                             position=position)
+        mask_wedge = design_mask(simulation.XY_grid,"Wedge",source.wavelength,ft_lens.focal_length,angle=angle_rad,position=position)
+
+        t4 = time.time()
+        # mask_phase_m = self.beam_shaper.generate_mask(mask_type="ϕ target field")
+        mask_phase_m = generate_target_mask(inverse_fourier_transform,mask_type="phase target field")
+        print("Time to generate mask phase m : ", t4 - t3)
+
+        # mask_mod_amp = self.beam_shaper.generate_mask(mask_type="modulation amplitude", amplitude_factor=1,
+        #                                               threshold=0.001)
+
+        mask_mod_amp, uncorrected_amplitude_mask, _ = generate_target_mask(inverse_fourier_transform,
+                                                                                        mask_type="modulation amplitude",
+                                                                                        input_field=source.field.field)
+
+        t5 = time.time()
+        print("Time to generate mask modulation amplitude : ", t5 - t4)
+
+        total_mask = wrap_phase(mask_wedge + mask_phase_m) * mask_mod_amp
+
+        t6 = time.time()
+        print("Time to generate total mask : ", t6 - t5)
+        total_mask = self.post_process_mask_for_display(total_mask)
+
+        t7 = time.time()
+        print("Time to post process mask : ", t7 - t6)
+
+        return total_mask, target_amplitude
 
 
 def design_mask(Grid_XY_in,mask_type,wavelength,focal_length,period=None,position = None, charge=None,orientation=None,angle = None, width = None, height = None, sigma_x=None,sigma_y=None,threshold=None,mask_path=None,amplitude_factor=1):

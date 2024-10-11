@@ -32,6 +32,9 @@ def main():
     source = Source(config_dict= config_source,
                     XY_grid= simulation.XY_grid)
 
+    plt.plot(source.field.field.detach().numpy()[2500,:])
+    plt.show()
+
     ft_lens = FT_Lens(simulation.delta_x_in, simulation.XY_grid,source.wavelength)
 
     width = 52*um

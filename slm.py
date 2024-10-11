@@ -52,6 +52,7 @@ class SLM(nn.Module):
         else :
             self.phase = self.phase_parameters
 
+        print(input_field.shape,self.phase.shape)
         return torch.abs(input_field) * torch.exp(1j * self.phase)
 
     def apply_phase_modulation_sigmoid(self, input_field,steepness=20,num_terms=3, spacing=0.5,mode_parity="even"):
@@ -63,6 +64,7 @@ class SLM(nn.Module):
                                                   mode_parity=mode_parity)
 
         return torch.abs(input_field) * torch.exp(1j * self.phase)
+    
     def apply_amplitude_modulation(self, input_field):
           amplitude_input = torch.abs(input_field)
           modulated_amplitude = amplitude_input * self.amplitude

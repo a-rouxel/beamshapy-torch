@@ -135,7 +135,7 @@ class OpticalSystem(pl.LightningModule):
         list_overlap_tmp.pop(self.target_mode)
 
 
-        loss += -10 * torch.log(1 - torch.max(torch.stack(list_overlap_tmp)))
+        loss += -1*(self.current_epoch) * torch.log(1 - torch.max(torch.stack(list_overlap_tmp)))
 
 
         # if loss == Nane

@@ -32,6 +32,38 @@ def calculate_normalized_overlap(field1, field2):
 
     return torch.abs(normalized_overlap)
 
+def calculate_unnormalized_overlap(field1, field2):
+    """
+    Calculate the normalized overlap integral of two complex fields using PyTorch.
+
+    Parameters:
+    - field1 (torch.Tensor): First complex field.
+    - field2 (torch.Tensor): Second complex field.
+
+    Returns:
+    - float: The normalized overlap integral.
+    """
+    # Ensure inputs are complex tensors
+    if not (torch.is_complex(field1) and torch.is_complex(field2)):
+        raise ValueError("Input fields must be complex tensors.")
+
+    # Compute the conjugates
+    field1_conj = torch.conj(field1)
+    field2_conj = torch.conj(field2)
+
+    # Compute the overlap integral
+    # overlap_integral = 0.5 * (torch.sum(field1 * field2_conj) + torch.sum(field1_conj * field2))
+    overlap_integral = (torch.sum(field1 * field2_conj) * torch.sum(field1_conj * field2))*1e-10
+    # Compute the individual integrals of the absolute squares of both fields
+    integral_field1 = torch.sum(torch.abs(field1) ** 2)
+    integral_field2 = torch.sum(torch.abs(field2) ** 2)
+
+    # Normalize the overlap integral
+    # normalized_overlap = overlap_integral / torch.sqrt(integral_field1 * integral_field2)
+    normalized_overlap = overlap_integral / (integral_field1 * integral_field2)
+
+    return torch.abs(overlap_integral)
+
 import matplotlib.pyplot as plt
 def quantize_phase(phase_tensor, n_levels,mode_parity="even"):
 

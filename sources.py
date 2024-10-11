@@ -22,7 +22,7 @@ class Source(nn.Module):
         self.amplitudes.requires_grad = False
         self.means = nn.Parameter(torch.zeros(self.num_gaussians, 2) * mm)
         self.means.requires_grad = False
-        self.sigmas = nn.Parameter(torch.ones(self.num_gaussians) * 1.3 * mm)
+        self.sigmas = nn.Parameter(torch.ones(self.num_gaussians) * 1.2* mm)
         self.sigmas.requires_grad = False
         self.phase = nn.Parameter(torch.zeros(XY_grid[0].shape))
         self.phase.requires_grad = False

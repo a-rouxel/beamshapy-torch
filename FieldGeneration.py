@@ -2,6 +2,7 @@ import torch
 from helpers import load_yaml_config
 from units import *
 from electric_field import ElectricField
+import matplotlib.pyplot as plt
 
 def generate_profile(profile_type, XY_grid,radius=None, parabola_coef=None,angle=0,width=None, height=None, position=(0, 0), period=None, phase_offset=0):
 
@@ -127,7 +128,7 @@ def generate_target_profiles(yaml_file,XY_grid,list_modes_nb=[]):
             phase_offset = torch.pi/2
         else:
             phase_offset = 0
-        sinus_period = 2* height / (1+mode_nb)
+        sinus_period = 2* width / (1+mode_nb)
 
         target_field = generate_profile("Rectangle",XY_grid,width=width,height=height)
         target_field *= generate_profile("Sinus",XY_grid,period=sinus_period,phase_offset=phase_offset)
