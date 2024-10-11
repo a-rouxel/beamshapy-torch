@@ -5,8 +5,11 @@ import matplotlib.pyplot as plt
 
 class SLM(nn.Module):
 
-    def __init__(self, config_dict= None, XY_grid= None,initial_phase=None, initial_amplitude=None):
+    def __init__(self, config_dict=None, XY_grid=None, initial_phase=None, initial_amplitude=None, device=None):
         super().__init__()
+
+        # Set the device (CUDA if available, else CPU)
+        self.device = device if device is not None else torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self.config_dict = config_dict
         self.XY_grid = XY_grid
@@ -16,31 +19,31 @@ class SLM(nn.Module):
         self.generate_initial_phase()
         self.generate_initial_amplitude()
 
-    def generate_initial_phase(self):
+        # Move the entire model to the specified device
+        self.to(self.device)
 
+    def generate_initial_phase(self):
         if self.initial_phase is not None:
-            self.phase_parameters = nn.Parameter(torch.tensor(self.initial_phase))
+            self.phase_parameters = nn.Parameter(torch.tensor(self.initial_phase, device=self.device))
         
         elif self.config_dict["initial phase"] == "random":
-            self.phase_parameters = nn.Parameter(2*torch.rand(self.XY_grid[0].shape)-1)
+            self.phase_parameters = nn.Parameter(2*torch.rand(self.XY_grid[0].shape, device=self.device)-1)
 
         elif self.config_dict["initial phase"] == "zero":
-            self.phase_parameters = nn.Parameter(torch.zeros(self.XY_grid[0].shape))
+            self.phase_parameters = nn.Parameter(torch.zeros(self.XY_grid[0].shape, device=self.device))
 
         elif self.config_dict["initial phase"] == "custom":
-            raise("Custom phase should be implemented")
+            raise NotImplementedError("Custom phase should be implemented")
     
     def generate_initial_amplitude(self):
-
         if self.initial_amplitude is not None:
-            self.amplitude = nn.Parameter(torch.tensor(self.initial_amplitude))
+            self.amplitude = nn.Parameter(torch.tensor(self.initial_amplitude, device=self.device))
             
         elif self.config_dict["initial amplitude"] == "ones":
-            self.amplitude = nn.Parameter(torch.ones(self.XY_grid[0].shape))
+            self.amplitude = nn.Parameter(torch.ones(self.XY_grid[0].shape, device=self.device))
 
         elif self.config_dict["initial amplitude"] == "custom":
-            raise("Custom amplitude should be implemented")
-
+            raise NotImplementedError("Custom amplitude should be implemented")
 
     def apply_phase_modulation(self, input_field,beta=1.0,mapping=True,parity=0):
           # self.phase = 0.5*torch.pi* (torch.tanh(beta*self.phase_parameters))
@@ -52,7 +55,7 @@ class SLM(nn.Module):
         else :
             self.phase = self.phase_parameters
 
-        print(input_field.shape,self.phase.shape)
+
         return torch.abs(input_field) * torch.exp(1j * self.phase)
 
     def apply_phase_modulation_sigmoid(self, input_field,steepness=20,num_terms=3, spacing=0.5,mode_parity="even"):
