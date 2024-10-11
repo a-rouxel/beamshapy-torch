@@ -365,15 +365,13 @@ if __name__ == "__main__":
 
     # Your existing training loop
     for try_nb in range(3):
-        list_minimize_losses = [True,False]
-        for minimize_losses in list_minimize_losses:
             for i in range(9):
 
                 model = OpticalSystem(log_dir="./lightning_logs", 
                                     device=device, 
                                     target_mode_nb=i, 
                                     try_nb=try_nb,
-                                    with_minimize_losses=minimize_losses)
+                                    with_minimize_losses=True)
 
                 tensorboard_logger = TensorBoardLogger("./lightning_logs", name="my_model")
                 early_stop_callback = EarlyStopping(

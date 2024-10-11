@@ -6,6 +6,7 @@ from helpers import load_yaml_config
 import matplotlib.pyplot as plt
 import numpy as np
 import torch 
+from helpers import generate_target_amplitude, design_mask, generate_target_mask, wrap_phase
 
 
 
@@ -22,8 +23,26 @@ asm = ASMPropagation(simulation_asm.delta_x_in, source_asm.wavelength, 20*mm, si
 
 
 wavelength = 850e-9  # 633 nm (He-Ne laser)
-focal_length = 150*mm  # Focal length in meters
+focal_length = 20*mm  # Focal length in meters
 radius = 1*mm
+
+# inverse_fourier_transform = torch.tensor(np.load("inverse_fourier_transform.npy"))
+
+# phase_inversion_mask = generate_target_mask(inverse_fourier_transform, mask_type="phase target field")
+# amplitude_modulation_mask, uncorrected_amplitude_mask, _ = generate_target_mask(inverse_fourier_transform,
+#                                                                                         mask_type="modulation amplitude",
+#                                                                                         input_field=source_asm.field.field)
+
+# abs = torch.abs(inverse_fourier_transform)
+
+# plt.imshow(abs)
+# plt.show()
+
+# plt.imshow(amplitude_modulation_mask)
+# plt.show()
+
+# plt.imshow(phase_inversion_mask)
+# plt.show()
 
 # Generate the binary Fresnel lens phase mask
 
@@ -37,10 +56,14 @@ plt.show()
 mask_dithered = np.load("mask_dithered_2.npy")
 mask_dithered += np.pi/2
 
+plt.imshow(mask_dithered)
+plt.show()
+
 phase_mask_angle = phase_mask.angle() + np.pi
 
 combined_mask = (phase_mask_angle + mask_dithered)
 combined_mask_mod = combined_mask % (2*np.pi)
+
 
 # Create a circular mask with radius 1 mm
 center_x, center_y = simulation_asm.XY_grid[0].shape[0] // 2, simulation_asm.XY_grid[1].shape[1] // 2
@@ -50,10 +73,17 @@ mask = dist_from_center <= (radius / simulation_asm.delta_x_in)
 
 # Apply the mask to combined_mask_mod
 combined_mask_mod = np.where(mask, combined_mask_mod, 0)
+
+plt.imshow(combined_mask_mod)
+plt.show()
+
 combined_mask_mod = torch.tensor(combined_mask_mod)
+
+
 
 # Convert to complex exponential form
 combined_mask_mod = torch.exp(1j * combined_mask_mod)
+
 
 
 
@@ -66,7 +96,7 @@ combined_mask_mod = torch.exp(1j * combined_mask_mod)
 # plt.show()
 
 # Modify z_values to have more points for a smoother visualization
-z_values = np.linspace(0*mm,15*mm, 100)
+z_values = np.linspace(0*mm,30*mm, 100)
 
 
 u_in_masked = source_asm.field.field * combined_mask_mod
@@ -123,4 +153,44 @@ plt.title(f"Intensity distribution with {height*1e6:.1f} µm square mask")
 plt.xlabel("X position (m)")
 plt.ylabel("Y position (m)")
 plt.show()
+
+# Visualize the phase distribution
+plt.figure(figsize=(10, 8))
+plt.imshow(torch.angle(u_out), cmap='hsv', extent=extent)
+plt.colorbar(label='Phase (radians)')
+
+# Add mask outline to phase plot
+mask_outline = plt.Rectangle((-height/2, -height/2), height, height, 
+                             fill=False, edgecolor='white', linestyle='--')
+plt.gca().add_patch(mask_outline)
+
+plt.title(f"Phase distribution with {height*1e6:.1f} µm square mask")
+plt.xlabel("X position (m)")
+plt.ylabel("Y position (m)")
+plt.show()
+
+# Combine intensity and phase plots
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 8))
+
+# Intensity plot
+im1 = ax1.imshow(torch.abs(u_out)**2, cmap='hot', extent=extent)
+ax1.add_patch(plt.Rectangle((-height/2, -height/2), height, height, 
+                            fill=False, edgecolor='white', linestyle='--'))
+ax1.set_title(f"Intensity distribution\n{height*1e6:.1f} µm square mask")
+ax1.set_xlabel("X position (m)")
+ax1.set_ylabel("Y position (m)")
+fig.colorbar(im1, ax=ax1, label='Intensity')
+
+# Phase plot
+im2 = ax2.imshow(torch.angle(u_out), cmap='hsv', extent=extent)
+ax2.add_patch(plt.Rectangle((-height/2, -height/2), height, height, 
+                            fill=False, edgecolor='white', linestyle='--'))
+ax2.set_title(f"Phase distribution\n{height*1e6:.1f} µm square mask")
+ax2.set_xlabel("X position (m)")
+ax2.set_ylabel("Y position (m)")
+fig.colorbar(im2, ax=ax2, label='Phase (radians)')
+
+plt.tight_layout()
+plt.show()
+
 

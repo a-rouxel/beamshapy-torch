@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
 import matplotlib
 from pprint import pprint
-from numba import jit
 from helpers import load_yaml_config
 from simulation import Simulation
 from sources import Source
@@ -41,7 +40,7 @@ def compute_loss_no_weights(out_field, list_target_field):
     return list_overlaps
 
 
-@jit(nopython=True)
+# @jit(nopython=True)
 def floyd_steinberg(image):
     h, w = image.shape
     for y in range(h):
@@ -104,13 +103,15 @@ def main():
         source_asm = Source(config_dict=config_source, XY_grid=simulation_asm.XY_grid)
         asm = ASMPropagation(simulation_asm.delta_x_in, source_asm.wavelength, 20*mm, simulation_asm.XY_grid[0].shape) 
 
-        list_target_fields = generate_target_profiles(yaml_file="./configs/target_profile.yml",
-                                                      XY_grid=ft_lens.XY_output_grid,
-                                                      list_modes_nb=[0, 1, 2, 3, 4, 5, 6, 7, 8])
+        print()
+
+        # list_target_fields = generate_target_profiles(yaml_file="./configs/target_profile.yml",
+        #                                               XY_grid=ft_lens.XY_output_grid,
+        #                                               list_modes_nb=[0, 1, 2, 3, 4, 5, 6, 7, 8])
         
-        list_target_fields_asm = generate_target_profiles(yaml_file="./configs/target_profile.yml",
-                                                      XY_grid=simulation_asm.XY_grid,
-                                                      list_modes_nb=[0, 1, 2, 3, 4, 5, 6, 7, 8])
+        # list_target_fields_asm = generate_target_profiles(yaml_file="./configs/target_profile.yml",
+        #                                               XY_grid=simulation_asm.XY_grid,
+        #                                               list_modes_nb=[0, 1, 2, 3, 4, 5, 6, 7, 8])
 
 
         # Implement the comparison using PyTorch
@@ -148,13 +149,18 @@ def main():
 
         target_amplitude = generate_target_amplitude(simulation.XY_grid, ft_lens.XY_output_grid, source.wavelength,
                                                      ft_lens.focal_length,
-                                                     amplitude_type="Rectangle", width=width, height=5*um)
+                                                     amplitude_type="Rectangle", width=width, height=width)
         target_amplitude *= generate_target_amplitude(simulation.XY_grid, ft_lens.XY_output_grid, source.wavelength,
                                                       ft_lens.focal_length,
                                                       amplitude_type="Sinus", period=sinus_period, phase_offset=phase_off)
         
  
         inverse_fourier_transform = ft_lens(target_amplitude, pad=False, flag_ifft=True)
+        print(inverse_fourier_transform.shape)
+        
+
+        np.save("inverse_fourier_transform.npy", inverse_fourier_transform.numpy())
+
 
         wedge_mask = design_mask(simulation.XY_grid, "Wedge", source.wavelength, ft_lens.focal_length, angle=0,
                                  position=0.12 * mm)
@@ -184,178 +190,178 @@ def main():
 
         np.save(f"mask_dithered_{mode_nb}.npy",mask_3)
 
-        # Assuming that mask_4 is loaded as a NumPy array from "best_slm_phase_2_0.npy"
-        mask_4 = np.load(f"./comparisons_results_optim_on_selectivity_2/optim_with_lens/best_slm_phase_{mode_nb}_0.npy")
-        mask_4 = torch.tensor(mask_4.copy(), dtype=torch.float32)
+    #     # Assuming that mask_4 is loaded as a NumPy array from "best_slm_phase_2_0.npy"
+    #     mask_4 = np.load(f"./comparisons_results_optim_on_selectivity_2/optim_with_lens/best_slm_phase_{mode_nb}_0.npy")
+    #     mask_4 = torch.tensor(mask_4.copy(), dtype=torch.float32)
 
-        mask_4 = quantize_phase(mask_4, 2, mode_parity=mode_parity)
-
-
-
-        # Assuming that mask_4 is loaded as a NumPy array from "best_slm_phase_2_0.npy"
-        mask_5 = np.load(f"./comparisons_results_optim_on_selectivity_2/optim_lensless_2/best_slm_phase_{mode_nb}_0_min_losses_True.npy")
-        mask_5 = torch.tensor(mask_5.copy(), dtype=torch.float32)
-        mask_5 = quantize_phase(mask_5, 2, mode_parity=mode_parity)
+    #     mask_4 = quantize_phase(mask_4, 2, mode_parity=mode_parity)
 
 
 
-        masks = [mask_1, mask_2, mask_3, mask_4, mask_5]
+    #     # Assuming that mask_4 is loaded as a NumPy array from "best_slm_phase_2_0.npy"
+    #     mask_5 = np.load(f"./comparisons_results_optim_on_selectivity_2/optim_lensless_2/best_slm_phase_{mode_nb}_0_min_losses_True.npy")
+    #     mask_5 = torch.tensor(mask_5.copy(), dtype=torch.float32)
+    #     mask_5 = quantize_phase(mask_5, 2, mode_parity=mode_parity)
 
 
 
-        intensities = []
-        cropped_intensities = []
-        cropped_masks = []
-        cropped_amplitudes = []
-        cropped_energy_inside = []
+    #     masks = [mask_1, mask_2, mask_3, mask_4, mask_5]
 
-        for idx,mask in enumerate(masks):
 
-            if idx !=4:
-                slm = SLM(config_dict=config_slm, XY_grid=simulation.XY_grid, initial_phase=mask)
-                modulated_field = slm.apply_phase_modulation(source.field.field, mapping=False)
-                out_field = ft_lens(modulated_field, pad=False, flag_ifft=False)
-            else :
 
-                slm_asm = SLM(config_dict=config_slm, XY_grid=simulation_asm.XY_grid, initial_phase=mask)
-                modulated_field = slm_asm.apply_phase_modulation(source_asm.field.field, mapping=False)
+    #     intensities = []
+    #     cropped_intensities = []
+    #     cropped_masks = []
+    #     cropped_amplitudes = []
+    #     cropped_energy_inside = []
 
-                out_field = asm(modulated_field)
+    #     for idx,mask in enumerate(masks):
 
-            intensity = torch.abs(out_field) ** 2
+    #         if idx !=4:
+    #             slm = SLM(config_dict=config_slm, XY_grid=simulation.XY_grid, initial_phase=mask)
+    #             modulated_field = slm.apply_phase_modulation(source.field.field, mapping=False)
+    #             out_field = ft_lens(modulated_field, pad=False, flag_ifft=False)
+    #         else :
 
-            if idx !=4:
-                power_previous = torch.sum(torch.abs(out_field) ** 2)
-                print("power_previous",power_previous)
-            if idx == 4:
-                power_asm = torch.sum(torch.abs(out_field) ** 2)
-                print("power_asm",power_asm)
-                intensity *= power_previous/power_asm
+    #             slm_asm = SLM(config_dict=config_slm, XY_grid=simulation_asm.XY_grid, initial_phase=mask)
+    #             modulated_field = slm_asm.apply_phase_modulation(source_asm.field.field, mapping=False)
+
+    #             out_field = asm(modulated_field)
+
+    #         intensity = torch.abs(out_field) ** 2
+
+    #         if idx !=4:
+    #             power_previous = torch.sum(torch.abs(out_field) ** 2)
+    #             print("power_previous",power_previous)
+    #         if idx == 4:
+    #             power_asm = torch.sum(torch.abs(out_field) ** 2)
+    #             print("power_asm",power_asm)
+    #             intensity *= power_previous/power_asm
 
 
         
 
-            intensities.append(intensity)
+    #         intensities.append(intensity)
 
-            # Example cropping, modify as needed
-            if idx ==0:
-                cropped_intensity = intensity[mask_with_wedge_y][:, mask_with_wedge_x]
-                cropped_amplitudes.append(out_field[mask_CRIGF_switch_y][:, mask_CRIGF_switch_x])
+    #         # Example cropping, modify as needed
+    #         if idx ==0:
+    #             cropped_intensity = intensity[mask_with_wedge_y][:, mask_with_wedge_x]
+    #             cropped_amplitudes.append(out_field[mask_CRIGF_switch_y][:, mask_CRIGF_switch_x])
             
-            elif idx == 4:
-                mask_with_center_asm = (simulation_asm.XY_grid[1][0, :] > - crop_size_detector / 2) & (simulation_asm.XY_grid[1][0, :] < crop_size_detector / 2)  # example bounds
-                mask_CRIGF_asm = (simulation_asm.XY_grid[1][0, :] > -height/2) & (simulation_asm.XY_grid[1][0, :] < height/2)
-                mask_center_asm = (simulation_asm.XY_grid[1][0,:] > -crop_size_slm / 2) & (simulation_asm.XY_grid[1][0,:] < crop_size_slm / 2)
+    #         elif idx == 4:
+    #             mask_with_center_asm = (simulation_asm.XY_grid[1][0, :] > - crop_size_detector / 2) & (simulation_asm.XY_grid[1][0, :] < crop_size_detector / 2)  # example bounds
+    #             mask_CRIGF_asm = (simulation_asm.XY_grid[1][0, :] > -height/2) & (simulation_asm.XY_grid[1][0, :] < height/2)
+    #             mask_center_asm = (simulation_asm.XY_grid[1][0,:] > -crop_size_slm / 2) & (simulation_asm.XY_grid[1][0,:] < crop_size_slm / 2)
 
-                cropped_intensity = intensity[mask_with_center_asm,:][:, mask_with_center_asm]
-                cropped_amplitudes.append(out_field[mask_CRIGF_asm][:, mask_CRIGF_asm])
-            else :
-                cropped_intensity = intensity[mask_with_center,:][:, mask_with_center]
-                cropped_amplitudes.append(out_field[mask_CRIGF][:, mask_CRIGF])
+    #             cropped_intensity = intensity[mask_with_center_asm,:][:, mask_with_center_asm]
+    #             cropped_amplitudes.append(out_field[mask_CRIGF_asm][:, mask_CRIGF_asm])
+    #         else :
+    #             cropped_intensity = intensity[mask_with_center,:][:, mask_with_center]
+    #             cropped_amplitudes.append(out_field[mask_CRIGF][:, mask_CRIGF])
 
 
-            cropped_energy_inside.append(torch.sum(cropped_intensity)/torch.sum(intensity))
-            if idx !=4:
-                cropped_mask = mask[mask_center_mask,:][:, mask_center_mask]
-            else :
-                cropped_mask = mask[mask_center_asm,:][:, mask_center_asm]
+    #         cropped_energy_inside.append(torch.sum(cropped_intensity)/torch.sum(intensity))
+    #         if idx !=4:
+    #             cropped_mask = mask[mask_center_mask,:][:, mask_center_mask]
+    #         else :
+    #             cropped_mask = mask[mask_center_asm,:][:, mask_center_asm]
             
-            cropped_intensities.append(cropped_intensity)
-            cropped_masks.append(cropped_mask)
+    #         cropped_intensities.append(cropped_intensity)
+    #         cropped_masks.append(cropped_mask)
 
-        list_cropped_target_fields = []
-        list_cropped_target_fields_asm = []
-        column_titles = ["Davis et al (1999)", "Phase inversion", "Phase inversion + dithering", "Pytorch Optim. Mask", "ASM"]
+    #     list_cropped_target_fields = []
+    #     list_cropped_target_fields_asm = []
+    #     column_titles = ["Davis et al (1999)", "Phase inversion", "Phase inversion + dithering", "Pytorch Optim. Mask", "ASM"]
 
-        for idx, target_field in enumerate(list_target_fields):
-            list_cropped_target_fields.append(target_field[mask_CRIGF, :][:, mask_CRIGF])
+    #     for idx, target_field in enumerate(list_target_fields):
+    #         list_cropped_target_fields.append(target_field[mask_CRIGF, :][:, mask_CRIGF])
         
-        for idx, target_field in enumerate(list_target_fields_asm):
-            list_cropped_target_fields_asm.append(target_field[mask_CRIGF_asm, :][:, mask_CRIGF_asm])
+    #     for idx, target_field in enumerate(list_target_fields_asm):
+    #         list_cropped_target_fields_asm.append(target_field[mask_CRIGF_asm, :][:, mask_CRIGF_asm])
 
 
-        cross_overlap_integrals = []
-        energies_inside = []
+    #     cross_overlap_integrals = []
+    #     energies_inside = []
 
-        for idx in range(len(cropped_amplitudes)):
-            if idx !=4:
-                cross_overlap_integral = compute_loss_no_weights(cropped_amplitudes[idx], list_cropped_target_fields)
-            else :
-                cross_overlap_integral = compute_loss_no_weights(cropped_amplitudes[idx], list_cropped_target_fields_asm)
+    #     for idx in range(len(cropped_amplitudes)):
+    #         if idx !=4:
+    #             cross_overlap_integral = compute_loss_no_weights(cropped_amplitudes[idx], list_cropped_target_fields)
+    #         else :
+    #             cross_overlap_integral = compute_loss_no_weights(cropped_amplitudes[idx], list_cropped_target_fields_asm)
                 
-            cross_overlap_integrals.append(cross_overlap_integral)
-            energies_inside.append(cropped_energy_inside[idx] * 100)
+    #         cross_overlap_integrals.append(cross_overlap_integral)
+    #         energies_inside.append(cropped_energy_inside[idx] * 100)
 
         
 
 
-            list_cross_correlation_matrix[idx][mode_nb,:] = np.array(cross_overlap_integrals[idx][0:nb_of_modes_to_consider])
+    #         list_cross_correlation_matrix[idx][mode_nb,:] = np.array(cross_overlap_integrals[idx][0:nb_of_modes_to_consider])
 
-        fig, ax = plt.subplots(2, 5, figsize=(20, 10))
+    #     fig, ax = plt.subplots(2, 5, figsize=(20, 10))
 
-        for i, title in enumerate(column_titles):
-            ax[0, i].set_title(title)
+    #     for i, title in enumerate(column_titles):
+    #         ax[0, i].set_title(title)
 
-        for i in range(5):
-            print(cross_overlap_integrals[i])
-            im1 = ax[0, i].imshow(cropped_masks[i],
-                                  extent=[-crop_size_detector / (2 * mm), crop_size_detector / (2 * mm),
-                                          -crop_size_detector / (2 * mm), crop_size_detector / (2 * mm)], cmap="twilight",
-                                  vmin=-np.pi, vmax=np.pi)
-            ax[0, i].set_xlabel("X [mm]")
-            if i == 0:
-                ax[0, i].set_ylabel("Y [mm]")
+    #     for i in range(5):
+    #         print(cross_overlap_integrals[i])
+    #         im1 = ax[0, i].imshow(cropped_masks[i],
+    #                               extent=[-crop_size_detector / (2 * mm), crop_size_detector / (2 * mm),
+    #                                       -crop_size_detector / (2 * mm), crop_size_detector / (2 * mm)], cmap="twilight",
+    #                               vmin=-np.pi, vmax=np.pi)
+    #         ax[0, i].set_xlabel("X [mm]")
+    #         if i == 0:
+    #             ax[0, i].set_ylabel("Y [mm]")
 
-            im2 = ax[1, i].imshow(cropped_intensities[i].detach().numpy(),
-                                  extent=[-crop_size_detector / (2 * um), crop_size_detector / (2 * um),
-                                          -crop_size_detector / (2 * um), crop_size_detector / (2 * um)], cmap="gray",
-                                  vmin=0, vmax=50)
-            ax[1, i].set_xlabel("X [um]")
-            if i == 0:
-                ax[1, i].set_ylabel("Y [um]")
+    #         im2 = ax[1, i].imshow(cropped_intensities[i].detach().numpy(),
+    #                               extent=[-crop_size_detector / (2 * um), crop_size_detector / (2 * um),
+    #                                       -crop_size_detector / (2 * um), crop_size_detector / (2 * um)], cmap="gray",
+    #                               vmin=0, vmax=50)
+    #         ax[1, i].set_xlabel("X [um]")
+    #         if i == 0:
+    #             ax[1, i].set_ylabel("Y [um]")
 
-            # Overlay energy and overlap integral
-            energy_text = f"Energy inside: {energies_inside[i]:.2f}%  %"
-            # for idx2, overlap in enumerate(cross_overlap_integrals[i][mode_nb]):
-            overlap_text = f"Overlap integral : {cross_overlap_integrals[i][mode_nb]:.2f}"
-            ax[1, i].text(0.05, 0.95+0.1, overlap_text, transform=ax[1, i].transAxes, color='white',
-                          fontsize=8,
-                          verticalalignment='top', bbox=dict(facecolor='black', alpha=0.5))
-            ax[1, i].text(0.05, 0.95, energy_text, transform=ax[1, i].transAxes, color='white', fontsize=8,
-                          verticalalignment='top', bbox=dict(facecolor='black', alpha=0.5))
+    #         # Overlay energy and overlap integral
+    #         energy_text = f"Energy inside: {energies_inside[i]:.2f}%  %"
+    #         # for idx2, overlap in enumerate(cross_overlap_integrals[i][mode_nb]):
+    #         overlap_text = f"Overlap integral : {cross_overlap_integrals[i][mode_nb]:.2f}"
+    #         ax[1, i].text(0.05, 0.95+0.1, overlap_text, transform=ax[1, i].transAxes, color='white',
+    #                       fontsize=8,
+    #                       verticalalignment='top', bbox=dict(facecolor='black', alpha=0.5))
+    #         ax[1, i].text(0.05, 0.95, energy_text, transform=ax[1, i].transAxes, color='white', fontsize=8,
+    #                       verticalalignment='top', bbox=dict(facecolor='black', alpha=0.5))
 
-        cbar1 = fig.colorbar(im1, ax=ax[0, -1], orientation='vertical', fraction=0.046, pad=0.04)
-        cbar1.set_label('Phase [radians]')
-        cbar2 = fig.colorbar(im2, ax=ax[1, -1], orientation='vertical', fraction=0.046, pad=0.04)
-        cbar2.set_label('Intensity [a.u.]')
-        plt.tight_layout()
-        plt.savefig(dir_path + f"maps_{mode_nb}.svg")
-        # plt.show()
+    #     cbar1 = fig.colorbar(im1, ax=ax[0, -1], orientation='vertical', fraction=0.046, pad=0.04)
+    #     cbar1.set_label('Phase [radians]')
+    #     cbar2 = fig.colorbar(im2, ax=ax[1, -1], orientation='vertical', fraction=0.046, pad=0.04)
+    #     cbar2.set_label('Intensity [a.u.]')
+    #     plt.tight_layout()
+    #     plt.savefig(dir_path + f"maps_{mode_nb}.svg")
+    #     # plt.show()
 
-    # Calculate the global vmin and vmax
-    all_values = np.concatenate([matrix.flatten() for matrix in list_cross_correlation_matrix])
-    global_vmin = all_values.min()+1e-10
-    global_vmax = all_values.max()
+    # # Calculate the global vmin and vmax
+    # all_values = np.concatenate([matrix.flatten() for matrix in list_cross_correlation_matrix])
+    # global_vmin = all_values.min()+1e-10
+    # global_vmax = all_values.max()
 
-    fig, ax = plt.subplots(1, 5, figsize=(20, 5))
+    # fig, ax = plt.subplots(1, 5, figsize=(20, 5))
 
-    for i, title in enumerate(column_titles):
-        ax[i].set_title(title)
-        im = ax[i].imshow(list_cross_correlation_matrix[i], cmap=new_cmap,
-                          norm=LogNorm(vmin=global_vmin, vmax=global_vmax))
-        ax[i].set_ylabel("Target Mode")
-        ax[i].set_xlabel("Mode Number")
+    # for i, title in enumerate(column_titles):
+    #     ax[i].set_title(title)
+    #     im = ax[i].imshow(list_cross_correlation_matrix[i], cmap=new_cmap,
+    #                       norm=LogNorm(vmin=global_vmin, vmax=global_vmax))
+    #     ax[i].set_ylabel("Target Mode")
+    #     ax[i].set_xlabel("Mode Number")
 
-        # Add the text annotations for each matrix value
-        for (j, k), val in np.ndenumerate(list_cross_correlation_matrix[i]):
-            ax[i].text(k, j, format_val(val), ha='center', va='center', color='white', fontsize=7,
-                       bbox=dict(facecolor='black', alpha=0.2, edgecolor='none'))
+    #     # Add the text annotations for each matrix value
+    #     for (j, k), val in np.ndenumerate(list_cross_correlation_matrix[i]):
+    #         ax[i].text(k, j, format_val(val), ha='center', va='center', color='white', fontsize=7,
+    #                    bbox=dict(facecolor='black', alpha=0.2, edgecolor='none'))
 
-        cbar1 = fig.colorbar(im, ax=ax[i], orientation='vertical', fraction=0.046, pad=0.04)
-        cbar1.set_label('Overlap Integral')
+    #     cbar1 = fig.colorbar(im, ax=ax[i], orientation='vertical', fraction=0.046, pad=0.04)
+    #     cbar1.set_label('Overlap Integral')
 
-    plt.tight_layout()
-    plt.savefig(dir_path + "cross_correlation_matrix.svg")
+    # plt.tight_layout()
+    # plt.savefig(dir_path + "cross_correlation_matrix.svg")
     # plt.show()
     # plt.show()
 
