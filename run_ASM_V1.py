@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 import os
 from datetime import datetime
+import math
 
 class OpticalSystem(nn.Module):
     def __init__(self, device="cpu", target_mode_nb=2, with_minimize_losses=True):
@@ -174,15 +175,14 @@ def normalize_image(tensor):
     tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + 1e-8)
     return tensor
 
-def optimize_phase_mask():
+def optimize_phase_mask(target_mode_nb, run_name, run_number):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Initialize the TensorBoard writer with a unique run name
-    run_name = datetime.now().strftime("%Y%m%d-%H%M%S")
-    writer = SummaryWriter(log_dir=f'./logs/run_{run_name}')
+    writer = SummaryWriter(log_dir=f'./logs/{run_name}/mode_{target_mode_nb}/run_{run_number}')
 
     # Initialize the model
-    model = OpticalSystem(device=device, target_mode_nb=3, with_minimize_losses=True)
+    model = OpticalSystem(device=device, target_mode_nb=target_mode_nb, with_minimize_losses=True)
 
     # Move source field to device
     source_field = model.source.field.field.to(model.device)
@@ -194,6 +194,13 @@ def optimize_phase_mask():
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10000, eta_min=1e-2)
 
     num_epochs = 8000
+    save_mask_epochs = []
+
+    # Calculate epochs to save masks, starting from 100
+    for i in range(int(math.log2(num_epochs)) + 1):
+        save_mask_epochs.extend(range(max(2**i - 1, 100), 2**(i+1) - 1, 2**i))
+    save_mask_epochs = [epoch for epoch in save_mask_epochs if 100 <= epoch < num_epochs]
+
     for epoch in range(num_epochs):
         model.train()
         optimizer.zero_grad()
@@ -226,32 +233,27 @@ def optimize_phase_mask():
         for idx, overlap in enumerate(loss_components['list_overlaps']):
             writer.add_scalar(f'Overlap/Mode {idx}', overlap, global_step)
 
-        # Log images every 100 epochs
-        if epoch % 100 == 0 or epoch == num_epochs - 1:
-            print(f"Epoch {epoch}/{num_epochs} - Loss: {loss.item()}")
-            print(f"Overlaps: {loss_components['list_overlaps']}")
-            print(f"Inside Energy Percentage: {loss_components['inside_energy_percentage']}")
-
-            os.makedirs('./phase_masks', exist_ok=True)
+        if epoch in save_mask_epochs:
             # Save the phase mask
-            np.save(f'./phase_masks/slm_phase_epoch_{epoch}.npy', model.slm.phase.detach().cpu().numpy())
+            os.makedirs(f'./phase_masks/{run_name}/mode_{target_mode_nb}/run_{run_number}', exist_ok=True)
+            np.save(f'./phase_masks/{run_name}/mode_{target_mode_nb}/run_{run_number}/slm_phase_epoch_{epoch}.npy', model.slm.phase.detach().cpu().numpy())
 
-            # Log images
-            # Phase mask
-            phase_mask = model.slm.phase.detach().cpu().numpy()
-            phase_mask = (phase_mask - phase_mask.min()) / (phase_mask.max() - phase_mask.min() + 1e-8)
-            phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
-            writer.add_image('SLM/phase_mask', phase_mask, global_step)
+            # # Log images
+            # # Phase mask
+            # phase_mask = model.slm.phase.detach().cpu().numpy()
+            # phase_mask = (phase_mask - phase_mask.min()) / (phase_mask.max() - phase_mask.min() + 1e-8)
+            # phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
+            # writer.add_image('SLM/phase_mask', phase_mask, global_step)
 
-            # Output field intensity
-            output_intensity = normalize_image(out_field)
-            output_intensity = output_intensity[np.newaxis, :, :]
-            writer.add_image('Field/output_intensity', output_intensity, global_step)
+            # # Output field intensity
+            # output_intensity = normalize_image(out_field)
+            # output_intensity = output_intensity[np.newaxis, :, :]
+            # writer.add_image('Field/output_intensity', output_intensity, global_step)
 
-            # Target field intensity
-            target_intensity = normalize_image(model.target_field)
-            target_intensity = target_intensity[np.newaxis, :, :]
-            writer.add_image('Field/target_intensity', target_intensity, global_step)
+            # # Target field intensity
+            # target_intensity = normalize_image(model.target_field)
+            # target_intensity = target_intensity[np.newaxis, :, :]
+            # writer.add_image('Field/target_intensity', target_intensity, global_step)
 
             # # Optional: Log side-view propagation figure
             # fig = plot_side_view(model, source_field)
@@ -262,7 +264,20 @@ def optimize_phase_mask():
     writer.close()
 
     # Save the final model
-    torch.save(model.state_dict(), f'./models/model_{run_name}.pth')
+    os.makedirs(f'./models/{run_name}/mode_{target_mode_nb}', exist_ok=True)
+    torch.save(model.state_dict(), f'./models/{run_name}/mode_{target_mode_nb}/model_run_{run_number}.pth')
+
+def run_multiple_tests():
+    run_name = datetime.now().strftime("%Y%m%d-%H%M%S")
+    target_modes = [0, 1, 2, 3, 4, 5, 6, 7, 8]  # Add or remove modes as needed
+    num_runs_per_mode = 3
+
+    for mode in target_modes:
+        print(f"Optimizing for target mode {mode}")
+        for run in range(num_runs_per_mode):
+            print(f"  Run {run + 1}/{num_runs_per_mode}")
+            optimize_phase_mask(target_mode_nb=mode, run_name=run_name, run_number=run + 1)
+        print(f"Optimization for target mode {mode} completed")
 
 def plot_side_view(model, source_field):
     # Generate z values
@@ -323,4 +338,4 @@ def visualize_weights_map(model):
 # In the optimize_phase_mask function, after initializing the model:
 
 if __name__ == "__main__":
-    optimize_phase_mask()
+    run_multiple_tests()
