@@ -16,6 +16,8 @@ import os
 from datetime import datetime
 import math
 from tqdm import tqdm
+import csv
+from tabulate import tabulate
 
 class OpticalSystem(nn.Module):
     def __init__(self, device="cpu", target_mode_nb=2, with_minimize_losses=True):
@@ -272,21 +274,39 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
     # Close the writer after training
     writer.close()
 
-    # Save the final model
-    os.makedirs(f'./models/{run_name}/mode_{target_mode_nb}', exist_ok=True)
-    torch.save(model.state_dict(), f'./models/{run_name}/mode_{target_mode_nb}/model_run_{run_number}.pth')
+    # # Save the final model
+    # os.makedirs(f'./models/{run_name}/mode_{target_mode_nb}', exist_ok=True)
+    # torch.save(model.state_dict(), f'./models/{run_name}/mode_{target_mode_nb}/model_run_{run_number}.pth')
+
+    # Return the final results
+    final_overlaps = loss_components['list_overlaps']
+    final_inside_energy = loss_components['inside_energy_percentage']
+    return final_overlaps, final_inside_energy
 
 def run_multiple_tests():
     run_name = datetime.now().strftime("%Y%m%d-%H%M%S")
-    target_modes = [0, 1, 2, 3, 4, 5, 6, 7, 8]  # Add or remove modes as needed
-    num_runs_per_mode = 3
+    target_modes = [0, 1, 2]  # Add or remove modes as needed
+    num_runs_per_mode = 2
+
+    results = []
 
     for mode in target_modes:
-        print(f"Optimizing for target mode {mode}")
         for run in range(num_runs_per_mode):
-            print(f"  Run {run + 1}/{num_runs_per_mode}")
-            optimize_phase_mask(target_mode_nb=mode, run_name=run_name, run_number=run + 1)
-        print(f"Optimization for target mode {mode} completed")
+            overlaps, inside_energy = optimize_phase_mask(target_mode_nb=mode, run_name=run_name, run_number=run + 1)
+            results.append([mode, run + 1] + overlaps + [inside_energy])
+    # Print results table
+    headers = ["Target Mode", "Run"] + [f"Mode {i}" for i in range(len(overlaps))] + ["Inside Energy %"]
+    print("\nResults:")
+    print(tabulate(results, headers=headers, floatfmt=".4f"))
+
+    # Save results to CSV
+    csv_filename = f"results_{run_name}.csv"
+    with open(csv_filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(headers)
+        writer.writerows(results)
+    
+    print(f"\nResults saved to {csv_filename}")
 
 def plot_side_view(model, source_field):
     # Generate z values
