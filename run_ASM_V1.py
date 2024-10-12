@@ -197,7 +197,7 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
     # Learning rate scheduler
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10000, eta_min=1e-2)
 
-    num_epochs = 100
+    num_epochs = 8500
     save_mask_epochs = []
 
     # Calculate epochs to save masks, starting from 100
@@ -299,7 +299,7 @@ def run_multiple_tests():
     for mode in target_modes:
         for run in range(num_runs_per_mode):
             overlaps, inside_energy = optimize_phase_mask(target_mode_nb=mode, run_name=run_name, run_number=run + 1)
-            results.append([mode, run + 1] + overlaps + [inside_energy*100])
+            results.append([mode, run + 1] + overlaps + [inside_energy])
 
             # Update and display the results table
             table = tabulate(results, headers=headers, floatfmt=".4f", tablefmt="grid")
