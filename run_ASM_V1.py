@@ -15,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 import os
 from datetime import datetime
 import math
+from tqdm import tqdm
 
 class OpticalSystem(nn.Module):
     def __init__(self, device="cpu", target_mode_nb=2, with_minimize_losses=True):
@@ -193,7 +194,7 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
     # Learning rate scheduler
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10000, eta_min=1e-2)
 
-    num_epochs = 8000
+    num_epochs = 8500
     save_mask_epochs = []
 
     # Calculate epochs to save masks, starting from 100
@@ -201,13 +202,15 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
         save_mask_epochs.extend(range(max(2**i - 1, 100), 2**(i+1) - 1, 2**i))
     save_mask_epochs = [epoch for epoch in save_mask_epochs if 100 <= epoch < num_epochs]
 
-    for epoch in range(num_epochs):
+    # Add tqdm progress bar
+    pbar = tqdm(range(num_epochs), desc=f"Mode {target_mode_nb}, Run {run_number}")
+
+    for epoch in pbar:
         model.train()
         optimizer.zero_grad()
 
         # Forward pass
-        out_field = model(source_field,epoch)
-
+        out_field = model(source_field, epoch)
 
         # Compute loss
         loss, loss_components = model.compute_loss(out_field, model.list_target_files, epoch)
@@ -232,6 +235,9 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
         # Log overlaps with mode numbers
         for idx, overlap in enumerate(loss_components['list_overlaps']):
             writer.add_scalar(f'Overlap/Mode {idx}', overlap, global_step)
+
+        # Update progress bar description with current loss
+        pbar.set_postfix({'loss': f'{loss.item():.4f}'})
 
         if epoch in save_mask_epochs:
             # Save the phase mask
@@ -259,6 +265,9 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
             # fig = plot_side_view(model, source_field)
             # writer.add_figure('Propagation/side_view', fig, global_step)
             # plt.close(fig)
+
+    # Close the progress bar
+    pbar.close()
 
     # Close the writer after training
     writer.close()
