@@ -299,7 +299,7 @@ def run_multiple_tests():
     for mode in target_modes:
         for run in range(num_runs_per_mode):
             overlaps, inside_energy = optimize_phase_mask(target_mode_nb=mode, run_name=run_name, run_number=run + 1)
-            results.append([mode, run + 1] + overlaps + [inside_energy])
+            results.append([mode, run + 1] + overlaps + [inside_energy*100])
 
             # Update and display the results table
             table = tabulate(results, headers=headers, floatfmt=".4f", tablefmt="grid")
