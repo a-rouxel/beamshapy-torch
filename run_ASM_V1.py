@@ -285,8 +285,8 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
 
 def run_multiple_tests():
     run_name = datetime.now().strftime("%Y%m%d-%H%M%S")
-    target_modes = [0, 1, 2]  # Add or remove modes as needed
-    num_runs_per_mode = 2
+    target_modes = [0, 1, 2, 3, 4, 5, 6, 7, 8]  # Add or remove modes as needed
+    num_runs_per_mode = 3
 
     results = []
 
