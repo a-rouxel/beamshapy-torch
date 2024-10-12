@@ -168,7 +168,7 @@ class OpticalSystem(nn.Module):
             'loss4': loss4.item(),
             'symmetry_loss': symmetry_loss.item()*symmetry_weight,
             'inside_energy_percentage': inside_energy_percentage.item(),
-            'list_overlaps': [overlap.item() for overlap in list_overlaps]
+            'list_overlaps': [overlap.item()*100 for overlap in list_overlaps]
         }
 
         return loss, loss_components
@@ -179,11 +179,11 @@ def normalize_image(tensor):
     tensor = (tensor - tensor.min()) / (tensor.max() - tensor.min() + 1e-8)
     return tensor
 
-def optimize_phase_mask(target_mode_nb, run_name, run_number):
+def optimize_phase_mask(target_mode_nb, run_name, run_number, data_dir, num_epochs):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Initialize the TensorBoard writer with a unique run name
-    writer = SummaryWriter(log_dir=f'./logs/{run_name}/mode_{target_mode_nb}/run_{run_number}')
+    writer = SummaryWriter(log_dir=f'{data_dir}/{run_name}/logs/mode_{target_mode_nb}/run_{run_number}')
 
     # Initialize the model
     model = OpticalSystem(device=device, target_mode_nb=target_mode_nb, with_minimize_losses=True)
@@ -197,7 +197,7 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
     # Learning rate scheduler
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10000, eta_min=1e-2)
 
-    num_epochs = 8500
+    # num_epochs = 8500  # Remove this line
     save_mask_epochs = []
 
     # Calculate epochs to save masks, starting from 100
@@ -244,8 +244,8 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
 
         if epoch in save_mask_epochs:
             # Save the phase mask
-            os.makedirs(f'./phase_masks/{run_name}/mode_{target_mode_nb}/run_{run_number}', exist_ok=True)
-            np.save(f'./phase_masks/{run_name}/mode_{target_mode_nb}/run_{run_number}/slm_phase_epoch_{epoch}.npy', model.slm.phase.detach().cpu().numpy())
+            os.makedirs(f'{data_dir}/{run_name}/phase_masks/mode_{target_mode_nb}/run_{run_number}', exist_ok=True)
+            np.save(f'{data_dir}/{run_name}/phase_masks/mode_{target_mode_nb}/run_{run_number}/slm_phase_epoch_{epoch}.npy', model.slm.phase.detach().cpu().numpy())
 
             # # Log images
             # # Phase mask
@@ -276,21 +276,24 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number):
     writer.close()
 
     # # Save the final model
-    # os.makedirs(f'./models/{run_name}/mode_{target_mode_nb}', exist_ok=True)
-    # torch.save(model.state_dict(), f'./models/{run_name}/mode_{target_mode_nb}/model_run_{run_number}.pth')
+    # os.makedirs(f'{data_dir}/{run_name}/models/mode_{target_mode_nb}', exist_ok=True)
+    # torch.save(model.state_dict(), f'{data_dir}/{run_name}/models/mode_{target_mode_nb}/model_run_{run_number}.pth')
 
     # Return the final results
     final_overlaps = loss_components['list_overlaps']
     final_inside_energy = loss_components['inside_energy_percentage']*100
     return final_overlaps, final_inside_energy
 
-def run_multiple_tests():
-    run_name = datetime.now().strftime("%Y%m%d-%H%M%S")
-    target_modes = [0, 1, 2, 3, 4, 5, 6, 7, 8]  # Add or remove modes as needed
-    num_runs_per_mode = 3
+def run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs, run_name=None):
+    if run_name is None:
+        run_name = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    # Create the main directory for this run
+    run_dir = f"{data_dir}/{run_name}"
+    os.makedirs(run_dir, exist_ok=True)
 
     results = []
-    headers = ["Target Mode", "Run"] + [f"Mode {i}" for i in range(9)] + ["Inside Energy %"]
+    headers = ["Target Mode", "Run"] + [f"Mode {i} (%) Overlap" for i in range(9)] + ["Inside Energy %"]
 
     # Create a progress bar for the overall process
     total_iterations = len(target_modes) * num_runs_per_mode
@@ -298,7 +301,7 @@ def run_multiple_tests():
 
     for mode in target_modes:
         for run in range(num_runs_per_mode):
-            overlaps, inside_energy = optimize_phase_mask(target_mode_nb=mode, run_name=run_name, run_number=run + 1)
+            overlaps, inside_energy = optimize_phase_mask(target_mode_nb=mode, run_name=run_name, run_number=run + 1, data_dir=data_dir, num_epochs=num_epochs)
             results.append([mode, run + 1] + overlaps + [inside_energy])
 
             # Update and display the results table
@@ -315,7 +318,7 @@ def run_multiple_tests():
     pbar.close()
 
     # Save results to CSV
-    csv_filename = f"results_{run_name}.csv"
+    csv_filename = f"{run_dir}/results.csv"
     with open(csv_filename, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(headers)
@@ -382,4 +385,11 @@ def visualize_weights_map(model):
 # In the optimize_phase_mask function, after initializing the model:
 
 if __name__ == "__main__":
-    run_multiple_tests()
+    
+    data_dir = "/data"  # You can change this to any directory you want
+    target_modes = [0, 1, 2, 3, 4, 5, 6, 7, 8]  # Add or remove modes as needed
+    num_runs_per_mode = 3
+    num_epochs = 8500  # Set the number of epochs here
+    run_name = "my_experiment"  # Optional: provide a custom run name
+
+    run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs, run_name)
