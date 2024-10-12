@@ -18,6 +18,7 @@ import math
 from tqdm import tqdm
 import csv
 from tabulate import tabulate
+import sys
 
 class OpticalSystem(nn.Module):
     def __init__(self, device="cpu", target_mode_nb=2, with_minimize_losses=True):
@@ -289,15 +290,29 @@ def run_multiple_tests():
     num_runs_per_mode = 3
 
     results = []
+    headers = ["Target Mode", "Run"] + [f"Mode {i}" for i in range(9)] + ["Inside Energy %"]
+
+    # Create a progress bar for the overall process
+    total_iterations = len(target_modes) * num_runs_per_mode
+    pbar = tqdm(total=total_iterations, desc="Overall Progress", position=0, leave=True)
 
     for mode in target_modes:
         for run in range(num_runs_per_mode):
             overlaps, inside_energy = optimize_phase_mask(target_mode_nb=mode, run_name=run_name, run_number=run + 1)
             results.append([mode, run + 1] + overlaps + [inside_energy])
-    # Print results table
-    headers = ["Target Mode", "Run"] + [f"Mode {i}" for i in range(len(overlaps))] + ["Inside Energy %"]
-    print("\nResults:")
-    print(tabulate(results, headers=headers, floatfmt=".4f"))
+
+            # Update and display the results table
+            table = tabulate(results, headers=headers, floatfmt=".4f", tablefmt="grid")
+            
+            # Clear the previous output and print the updated table
+            sys.stdout.write("\033[K")  # Clear the current line
+            print("\033[F" * (len(results) + 3))  # Move cursor up
+            print(table)
+            
+            # Update the progress bar
+            pbar.update(1)
+
+    pbar.close()
 
     # Save results to CSV
     csv_filename = f"results_{run_name}.csv"
