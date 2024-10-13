@@ -55,6 +55,7 @@ class SLM(nn.Module):
         else :
             self.phase = self.phase_parameters
 
+        print(input_field.device, self.phase.device)
 
         return torch.abs(input_field) * torch.exp(1j * self.phase)
 

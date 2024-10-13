@@ -305,7 +305,7 @@ if __name__ == "__main__":
     feature_size = (2e-6, 2e-6)  # Pixel size (dy, dx) in meters
     grid_size = (512, 512)  # Grid size (num_y, num_x)
     focal_length = 20*mm  # Focal length in meters
-    beam_waist = 500*um  # Beam waist in meters
+    beam_waist = 1000*um  # Beam waist in meters
 
     # Create the Gaussian beam input field
     u_in = create_gaussian_beam(grid_size, feature_size, wavelength, beam_waist)
