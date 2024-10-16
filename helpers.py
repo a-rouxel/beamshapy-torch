@@ -178,12 +178,14 @@ def generate_target_mask(inverse_fourier_target_field,mask_type,input_field=None
         input_abs_amplitude = torch.abs(input_field)
 
 
-
         mask = WeightsMask(input_abs_amplitude,target_abs_amplitude,threshold)
 
 
         a_values, correction_tab = generate_correction_tab()
         corrected_mask = correct_modulation_values(mask, a_values, correction_tab)
+
+        target_abs_amplitude = correct_modulation_values(target_abs_amplitude, a_values, correction_tab)
+        target_abs_amplitude = target_abs_amplitude / target_abs_amplitude.max()
 
         # plt.plot(target_abs_amplitude[:, 1250].detach().numpy())
         # plt.plot(input_abs_amplitude[:, 1250].detach().numpy())
@@ -191,7 +193,7 @@ def generate_target_mask(inverse_fourier_target_field,mask_type,input_field=None
         # plt.plot(corrected_mask[:, 1250])
         # plt.show()
 
-        return corrected_mask,mask,normalized_target_field
+        return corrected_mask, mask, target_abs_amplitude
 
     else:
         print("mask_type not recognized")

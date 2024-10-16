@@ -2,7 +2,6 @@ import cProfile
 import os
 import pstats
 import torch
-from jax import jit
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LogNorm
@@ -111,7 +110,7 @@ def main():
     non_linear_points = np.linspace(0, 0.9, 256) ** 2  # Quadratic distribution
     new_cmap = LinearSegmentedColormap.from_list('trunc_hot', hot_cmap(non_linear_points))
 
-    dir_path = "./comparisons_results_optim_on_selectivity_2um/"
+    dir_path = "./comparisons_results_optim_on_selectivity_3um_with_optim/"
     os.makedirs(dir_path, exist_ok=True)
 
     nb_of_modes_to_consider = 9
@@ -122,7 +121,13 @@ def main():
     cross_correlation_matrix_optim = np.zeros((nb_of_modes_to_consider, nb_of_modes_to_consider))
     cross_correlation_matrix_asm = np.zeros((nb_of_modes_to_consider, nb_of_modes_to_consider))
     cross_correlation_matrix_phase_inversion_only = np.zeros((nb_of_modes_to_consider, nb_of_modes_to_consider))
-    list_cross_correlation_matrix = [cross_correlation_matrix_davis, cross_correlation_matrix_phase_inversion_only, cross_correlation_matrix_phase_inversion, cross_correlation_matrix_floyd_steinberg, cross_correlation_matrix_asm]
+    
+    list_cross_correlation_matrix = [cross_correlation_matrix_davis, 
+                                     cross_correlation_matrix_phase_inversion_only, 
+                                     cross_correlation_matrix_phase_inversion, 
+                                     cross_correlation_matrix_floyd_steinberg, 
+                                     cross_correlation_matrix_asm,
+                                     cross_correlation_matrix_optim]
 
     config_source = load_yaml_config("./configs/source.yml")
     config_target = load_yaml_config("./configs/target_profile.yml")
@@ -130,10 +135,6 @@ def main():
     config_simulation = load_yaml_config("./configs/simulation.yml")
     config_input_beam = load_yaml_config("./configs/input_beam.yml")
     config_optical_system = load_yaml_config("./configs/optical_system.yml")
-
-    # mode_nb = 2
-
-    #
 
 
     simulation = Simulation(config_dict=config_simulation)
@@ -157,7 +158,7 @@ def main():
         # Implement the comparison using PyTorch
         # Target Amplitude Parameters
         width = 60 * um
-        height = 60 * um
+        height = 8 * um
 
         sinus_period = 2 * width / (mode_nb + 1)
         if mode_nb % 2 == 0:
@@ -182,9 +183,11 @@ def main():
         mask_center_mask = (simulation.XY_grid[1][0,:] > -crop_size_slm / 2) & (simulation.XY_grid[1][0,:] < crop_size_slm / 2)
 
         # mask CRIGF
-        mask_CRIGF = (ft_lens.XY_output_grid[1][0, :] > -height/2) & (ft_lens.XY_output_grid[1][0, :] < height/2)
+        mask_CRIGF_x = (ft_lens.XY_output_grid[1][0, :] > -height/2) & (ft_lens.XY_output_grid[1][0, :] < height/2)
+        mask_CRIGF_y = (ft_lens.XY_output_grid[1][0, :] > -width/2) & (ft_lens.XY_output_grid[1][0, :] < width/2)
+
         mask_CRIGF_switch_x = (ft_lens.XY_output_grid[1][0, :] > position-height/2) & (ft_lens.XY_output_grid[1][0, :] < position+height/2)
-        mask_CRIGF_switch_y = (ft_lens.XY_output_grid[1][0, :] > -height/2) & (ft_lens.XY_output_grid[1][0, :] < height/2)
+        mask_CRIGF_switch_y = (ft_lens.XY_output_grid[1][0, :] > -width/2) & (ft_lens.XY_output_grid[1][0, :] < width/2)
 
 
         target_amplitude = generate_target_amplitude(simulation.XY_grid, ft_lens.XY_output_grid, source.wavelength,
@@ -196,7 +199,8 @@ def main():
         
  
         inverse_fourier_transform = ft_lens(target_amplitude, pad=False, flag_ifft=True)
-   
+
+
 
         wedge_mask = design_mask(simulation.XY_grid, "Wedge", source.wavelength, ft_lens.focal_length, angle=0,
                                  position=0.12 * mm)
@@ -206,7 +210,16 @@ def main():
                                                                                         input_field=source.field.field)
 
 
-        mask_1 = wrap_phase(phase_inversion_mask + wedge_mask) * amplitude_modulation_mask
+
+        cut_x_phase_inversion = phase_inversion_mask[1500,:]
+        cut_x_wedge = wedge_mask[1500,:]
+        cut_x_amplitude = amplitude_modulation_mask[1500,:]
+        cut_x_uncorrected_amplitude = uncorrected_amplitude_mask[1500,:]
+        cut_x_inverse_fourier_transform = torch.abs(inverse_fourier_transform[1500,:]).numpy()
+
+
+        mask_1 = wrap_phase(phase_inversion_mask + wedge_mask) * _
+
 
         if mode_nb % 2 == 0:
             target_field_unnormalized = torch.real(inverse_fourier_transform)
@@ -223,6 +236,8 @@ def main():
         mask_2 = dithered_amplitude * np.pi
         mask_2 -= np.pi / 2
 
+
+
         # 3. Phase inversion + dithering + Fresnel lens (ASM propagation)
         fresnel_mask, _ = create_binary_fresnel_lens(simulation_asm.XY_grid[0].shape,
                                                      (simulation_asm.delta_x_in, simulation_asm.delta_x_in),
@@ -232,8 +247,29 @@ def main():
         # Add a new mask for phase inversion alone
         mask_phase_inversion_only = phase_inversion_mask
 
+
+        # 5 - Optim. with lens
+        list_run = [2,1,1,1,3,1,2,2,3]
+        mask_optim = np.load(f"/data/Phase_masks_with_lens_V2/phase_masks/mode_{mode_nb}/run_{list_run[mode_nb]}/slm_phase_epoch_4095.npy")
+
+        mask_optim = torch.tensor(mask_optim.copy(), dtype=torch.float32)
+        mask_optim_with_quantization = quantize_phase(mask_optim, 2, mode_parity=mode_parity)
+
+
+
+        mask_dirs = [
+        "davis_masks",
+        "phase_inversion_masks",
+        "phase_inversion_dithering_masks",
+        "phase_inversion_dithering_fresnel_masks",
+        "optim_masks",
+        "optim_masks_with_quantization"
+    ]
+        for subdir in mask_dirs:
+            os.makedirs(os.path.join(dir_path, subdir), exist_ok=True)
+
         # Reorder the masks array
-        masks = [mask_1, mask_phase_inversion_only, mask_2, mask_3]
+        masks = [mask_1, mask_phase_inversion_only, mask_2, mask_3, mask_optim,mask_optim_with_quantization]
         intensities = []
         cropped_intensities = []
         cropped_masks = []
@@ -241,6 +277,10 @@ def main():
         cropped_energy_inside = []
 
         for idx, mask in enumerate(masks):
+
+            mask_filename = os.path.join(dir_path, mask_dirs[idx], f"full_mask_mode_{mode_nb}.npy")
+            np.save(mask_filename, mask)
+
             if idx != 3:  # Use regular propagation for all except ASM
                 slm = SLM(config_dict=config_slm, XY_grid=simulation.XY_grid, initial_phase=mask, device="cpu")
                 modulated_field = slm.apply_phase_modulation(source.field.field, mapping=False)
@@ -273,15 +313,17 @@ def main():
             
             elif idx == 3:
                 mask_with_center_asm = (simulation_asm.XY_grid[1][0, :] > - crop_size_detector / 2) & (simulation_asm.XY_grid[1][0, :] < crop_size_detector / 2)  # example bounds
-                mask_CRIGF_asm = (simulation_asm.XY_grid[1][0, :] > -height/2) & (simulation_asm.XY_grid[1][0, :] < height/2)
+                mask_CRIGF_asm_x = (simulation_asm.XY_grid[1][0, :] > -height/2) & (simulation_asm.XY_grid[1][0, :] < height/2)
+                mask_CRIGF_asm_y = (simulation_asm.XY_grid[1][0, :] > -width/2) & (simulation_asm.XY_grid[1][0, :] < width/2)
+
                 mask_center_asm = (simulation_asm.XY_grid[1][0,:] > -crop_size_slm / 2) & (simulation_asm.XY_grid[1][0,:] < crop_size_slm / 2)
 
                 cropped_intensity = intensity[mask_with_center_asm,:][:, mask_with_center_asm]
-                cropped_amplitude = out_field[mask_CRIGF_asm][:, mask_CRIGF_asm]
+                cropped_amplitude = out_field[mask_CRIGF_asm_y][:, mask_CRIGF_asm_x]
                 cropped_amplitudes.append(cropped_amplitude)
             else :
                 cropped_intensity = intensity[mask_with_center,:][:, mask_with_center]
-                cropped_amplitude = out_field[mask_CRIGF][:, mask_CRIGF]
+                cropped_amplitude = out_field[mask_CRIGF_y][:, mask_CRIGF_x]
                 cropped_amplitudes.append(cropped_amplitude)
 
 
@@ -296,13 +338,13 @@ def main():
 
         list_cropped_target_fields = []
         list_cropped_target_fields_asm = []
-        column_titles = ["SLM + Lens", "Phase inversion + Lens", "Phase inversion + dithering + Lens", "Phase inversion + dithering + Fresnel Lens"]
+        column_titles = ["SLM + Lens", "Phase inversion + Lens", "Phase inversion + dithering + Lens", "Phase inversion + dithering + Fresnel Lens", "Optim. with lens","Optim. with lens + quantization"]
 
         for idx, target_field in enumerate(list_target_fields):
-            list_cropped_target_fields.append(target_field[mask_CRIGF, :][:, mask_CRIGF])
+            list_cropped_target_fields.append(target_field[mask_CRIGF_y, :][:, mask_CRIGF_x])
         
         for idx, target_field in enumerate(list_target_fields_asm):
-            list_cropped_target_fields_asm.append(target_field[mask_CRIGF_asm, :][:, mask_CRIGF_asm])
+            list_cropped_target_fields_asm.append(target_field[mask_CRIGF_asm_y, :][:, mask_CRIGF_asm_x])
 
 
         cross_overlap_integrals = []
@@ -320,12 +362,12 @@ def main():
 
             list_cross_correlation_matrix[idx][mode_nb,:] = np.array(cross_overlap_integrals[idx][0:nb_of_modes_to_consider])
 
-        fig, ax = plt.subplots(2, 4, figsize=(22, 10))  # Change to 4 columns
+        fig, ax = plt.subplots(2, 6, figsize=(32, 10))  # Change to 4 columns
 
         for i, title in enumerate(column_titles):
             ax[0, i].set_title(title)
 
-        for i in range(4):  # Change to range(4)
+        for i in range(6):  # Change to range(4)
             print(cross_overlap_integrals[i])
             im1 = ax[0, i].imshow(cropped_masks[i],
                                   extent=[-crop_size_detector / (2 * mm), crop_size_detector / (2 * mm),
@@ -338,7 +380,7 @@ def main():
             im2 = ax[1, i].imshow(cropped_intensities[i].detach().numpy(),
                                   extent=[-crop_size_detector / (2 * um), crop_size_detector / (2 * um),
                                           -crop_size_detector / (2 * um), crop_size_detector / (2 * um)], cmap="gray",
-                                  vmin=0, vmax=100)
+                                  vmin=0, vmax=4000)
             ax[1, i].set_xlabel("X [um]")
             if i == 0:
                 ax[1, i].set_ylabel("Y [um]")
@@ -371,7 +413,7 @@ def main():
     global_vmin = all_values.min()+1e-10
     global_vmax = all_values.max()
 
-    fig, ax = plt.subplots(1, 4, figsize=(25, 5))  # Change to 4 columns
+    fig, ax = plt.subplots(1, 6, figsize=(32, 5))  # Change to 4 columns
 
     for i, title in enumerate(column_titles):
         ax[i].set_title(title)

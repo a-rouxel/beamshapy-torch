@@ -7,7 +7,7 @@ from helpers import load_yaml_config
 from simulation import Simulation
 from sources import Source
 from slm import SLM
-from ft_lens import ASMPropagation, propagate_and_collect_side_view
+from ft_lens import FT_Lens, propagate_and_collect_side_view
 from FieldGeneration import generate_target_profiles
 from cost_functions import calculate_normalized_overlap
 import matplotlib.pyplot as plt
@@ -27,17 +27,12 @@ class OpticalSystem(nn.Module):
         # Load configurations
         self.config_source = load_yaml_config("./configs/source.yml")
         self.config_slm = load_yaml_config("./configs/SLM.yml")
-        self.config_simulation = load_yaml_config("./configs/simulation_ASM.yml")
+        self.config_simulation = load_yaml_config("./configs/simulation.yml")
 
         # Initialize components
         self.simulation = Simulation(config_dict=self.config_simulation)
         self.source = Source(config_dict=self.config_source, XY_grid=self.simulation.XY_grid)
-        self.asm = ASMPropagation(
-            self.simulation.delta_x_in,
-            self.source.wavelength,
-            20 * mm,
-            self.simulation.XY_grid[0].shape
-        )
+        self.ft_lens = FT_Lens(self.simulation.delta_x_in, self.simulation.XY_grid, self.source.wavelength)
 
         # Set device
         self.device = torch.device(device)
@@ -49,11 +44,9 @@ class OpticalSystem(nn.Module):
         else:
             self.mode_parity = "odd"
         self.with_minimize_losses = with_minimize_losses
-        self.list_target_files = generate_target_profiles(
-            yaml_file="./configs/target_profile.yml",
-            XY_grid=self.simulation.XY_grid,
-            list_modes_nb=[0, 1, 2, 3, 4, 5, 6, 7, 8]
-        )
+        self.list_target_files = generate_target_profiles(yaml_file="./configs/target_profile.yml",
+                                                     XY_grid=self.ft_lens.XY_output_grid,
+                                                     list_modes_nb=[0,1,2,3,4,5,6,7,8])
         # Move target fields to device
         self.list_target_files = [field.to(self.device) for field in self.list_target_files]
         self.target_field = self.list_target_files[self.target_mode]
@@ -71,7 +64,7 @@ class OpticalSystem(nn.Module):
         modulated_field = self.slm.apply_phase_modulation_sigmoid(source_field,steepness=2 + epoch/200,num_terms=1, spacing=1,mode_parity=self.mode_parity)
 
         # Propagate the field
-        out_field = self.asm(modulated_field)
+        out_field = self.ft_lens(modulated_field, pad=False, flag_ifft=False)
 
         return out_field
 
@@ -149,7 +142,7 @@ class OpticalSystem(nn.Module):
         symmetry_loss = (symmetry_loss_y)
 
         # Energy inside the target region
-        loss4 = (1 - inside_energy_percentage) ** 2
+        loss4 = 0.2 * (1 - inside_energy_percentage) ** 2
 
         # Weight for symmetry loss
         symmetry_weight = 1.0  # You can adjust this weight based on importance
@@ -244,8 +237,8 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number, data_dir, num_epoc
             os.makedirs(f'{data_dir}/{run_name}/phase_masks/mode_{target_mode_nb}/run_{run_number}', exist_ok=True)
             np.save(f'{data_dir}/{run_name}/phase_masks/mode_{target_mode_nb}/run_{run_number}/slm_phase_epoch_{epoch}.npy', model.slm.phase.detach().cpu().numpy())
 
-            # # Log images
-            # # Phase mask
+            # Log images
+            # Phase mask
             # phase_mask = model.slm.phase.detach().cpu().numpy()
             # phase_mask = (phase_mask - phase_mask.min()) / (phase_mask.max() - phase_mask.min() + 1e-8)
             # phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
@@ -282,6 +275,12 @@ def run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs, ru
     results = []
     headers = ["Target Mode", "Run"] + [f"Mode {i}" for i in range(9)] + ["Inside Energy %"]
 
+    # Create the CSV file and write the headers
+    csv_filename = f"{run_dir}/results.csv"
+    with open(csv_filename, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(headers)
+
     # Create a progress bar for the overall process
     total_iterations = len(target_modes) * num_runs_per_mode
     overall_pbar = tqdm(total=total_iterations, desc="Overall Progress", position=0, leave=True)
@@ -293,7 +292,13 @@ def run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs, ru
             
             # Pass the progress bar to optimize_phase_mask
             overlaps, inside_energy = optimize_phase_mask(target_mode_nb=mode, run_name=run_name, run_number=run + 1, data_dir=data_dir, num_epochs=num_epochs, pbar=optimize_pbar)
-            results.append([mode, run + 1] + overlaps + [inside_energy])
+            result = [mode, run + 1] + overlaps + [inside_energy]
+            results.append(result)
+
+            # Append the result to the CSV file
+            with open(csv_filename, 'a', newline='') as csvfile:
+                writer = csv.writer(csvfile)
+                writer.writerow(result)
 
             # Close the nested progress bar
             optimize_pbar.close()
@@ -308,13 +313,6 @@ def run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs, ru
             overall_pbar.update(1)
 
     overall_pbar.close()
-
-    # Save results to CSV
-    csv_filename = f"{run_dir}/results.csv"
-    with open(csv_filename, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(headers)
-        writer.writerows(results)
     
     print(f"\nResults saved to {csv_filename}")
 
@@ -378,10 +376,10 @@ def visualize_weights_map(model):
 
 if __name__ == "__main__":
 
-    data_dir = "/data/arouxel"  # You can change this to any directory you want
-    target_modes = [0, 1, 2, 3, 4, 5, 6, 7, 8]  # Add or remove modes as needed
-    num_runs_per_mode = 5
-    num_epochs = 4500  # Set the number of epochs here
-    run_name = "Phase_masks_lensless_V2"  # Optional: provide a custom run name
+    data_dir = "/data"  # You can change this to any directory you want
+    target_modes = [0,1,2, 3, 4, 5, 6, 7, 8]  # Add or remove modes as needed
+    num_runs_per_mode = 3
+    num_epochs = 5000  # Set the number of epochs here
+    run_name = "Phase_masks_with_lens_V2"  # Optional: provide a custom run name
 
     run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs, run_name)
