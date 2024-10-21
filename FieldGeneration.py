@@ -165,9 +165,9 @@ def generate_target_profiles_specific_modes(yaml_file,XY_grid,list_modes_nb=[],o
         target_field *= generate_profile("Sinus",XY_grid,period=sinus_period,phase_offset=phase_offset)
 
         if orientation == "vertical":
-            pass
-        elif orientation == "horizontal":
             target_field = target_field.T
+        elif orientation == "horizontal":
+            pass
 
         target_field = ElectricField(torch.abs(target_field), torch.angle(target_field), XY_grid)
         list_target_profiles.append(target_field.field)
@@ -254,17 +254,17 @@ def generate_target_profile_CRIGF(list_mode_nb=(2,2),XY_grid=None):
 
     list_target_profiles = []
 
-    width = list_width[mode_nb_x]
-    height = list_height[mode_nb_y]
+    width = list_width[mode_nb_x] +10*um
+    height = list_height[mode_nb_y] +10*um
 
 
 
     target_field = generate_profile("Rectangle",XY_grid,width=width,height=height)
 
     target_field = ElectricField(torch.abs(target_field), torch.angle(target_field), XY_grid)
-    list_target_profiles.append(target_field.field)
 
-    return list_target_profiles
+
+    return target_field.field
 
 
 
