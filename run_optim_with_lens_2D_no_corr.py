@@ -108,33 +108,43 @@ class OpticalSystem(nn.Module):
         return kernel.outer(kernel)
 
     def compute_loss(self, out_field, list_target_field_horizontal, list_target_field_vertical, epoch):
-        energy_out = torch.sum(torch.abs(out_field) ** 2)
-        energy_out = energy_out + 1e-10  # Avoid divide by zero
-
         # Apply the weight map to the fields
         weighted_out_field = out_field * self.weights_map
 
-        inside_energy_percentage = torch.sum(torch.abs(weighted_out_field) ** 2) / energy_out
+        # Calculate total energy of the weighted output field
+        total_weighted_energy = torch.sum(torch.abs(weighted_out_field) ** 2)
+
+        # Find rows and columns where weights_map > 1e-3
+        rows_to_consider = torch.any(self.weights_map > 1e-3, dim=1)
+        cols_to_consider = torch.any(self.weights_map > 1e-3, dim=0)
 
         list_overlaps_horizontal = []
         list_overlaps_vertical = []
 
-        out_field_horizontal = torch.sum(weighted_out_field,dim=0)
-        out_field_vertical = torch.sum(weighted_out_field,dim=1)
-
-        self.out_field_horizontal = out_field_horizontal
-        self.out_field_vertical = out_field_vertical
-
         for target_field_horizontal, target_field_vertical in zip(list_target_field_horizontal, list_target_field_vertical):
+            # Horizontal overlap calculation
+            out_rows = weighted_out_field[:, cols_to_consider]
+            target_rows = target_field_horizontal[cols_to_consider].unsqueeze(0).expand_as(out_rows)
+            row_energies = torch.sum(torch.abs(out_rows) ** 2, dim=1)
+            overlaps_h = calculate_normalized_overlap(out_rows, target_rows)
+            weighted_overlap_horizontal = torch.sum(overlaps_h * row_energies)
 
-            overlap_horizontal = calculate_normalized_overlap(out_field_horizontal, target_field_horizontal)
-            overlap_vertical = calculate_normalized_overlap(out_field_vertical, target_field_vertical)
+            # Vertical overlap calculation
+            out_cols = weighted_out_field[rows_to_consider, :]
+            target_cols = target_field_vertical[rows_to_consider].unsqueeze(1).expand_as(out_cols)
+            col_energies = torch.sum(torch.abs(out_cols) ** 2, dim=0)
+            overlaps_v = calculate_normalized_overlap(out_cols, target_cols)
+            weighted_overlap_vertical = torch.sum(overlaps_v * col_energies)
 
-            list_overlaps_horizontal.append(overlap_horizontal)
-            list_overlaps_vertical.append(overlap_vertical)
+            # Normalize the weighted overlaps
+            normalized_overlap_horizontal = weighted_overlap_horizontal / total_weighted_energy
+            normalized_overlap_vertical = weighted_overlap_vertical / total_weighted_energy
 
-        loss_horizontal = -torch.log(list_overlaps_horizontal[self.target_modes[0]] + 1e-10)*1e-1
-        loss_vertical = -torch.log(list_overlaps_vertical[self.target_modes[1]] + 1e-10)*1e-1
+            list_overlaps_horizontal.append(normalized_overlap_horizontal)
+            list_overlaps_vertical.append(normalized_overlap_vertical)
+
+        loss_horizontal = -torch.log(list_overlaps_horizontal[self.target_modes[0]] + 1e-10) * 1e-1
+        loss_vertical = -torch.log(list_overlaps_vertical[self.target_modes[1]] + 1e-10) * 1e-1
 
         self.target_mode_horizontal = list_overlaps_horizontal[self.target_modes[0]]
         self.target_mode_vertical = list_overlaps_vertical[self.target_modes[1]]
@@ -159,26 +169,11 @@ class OpticalSystem(nn.Module):
 
         TV_term = torch.sum(torch.sqrt(diff_dim0_padded + diff_dim1_padded + 1e-2))
         loss_tv = TV_term * 5e-6 * (50 / (epoch + 1))
-        # loss3 = torch.tensor(0, device=self.device)
 
-        # Symmetry loss
-        # slm_phase = self.slm.phase
-        # # slm_phase_flip_x = torch.flip(slm_phase, dims=[0])  # Flip along the X axis
-        # slm_phase_flip_y = torch.flip(slm_phase, dims=[1])  # Flip along the Y axis
-        # # symmetry_loss_x = torch.mean((slm_phase - slm_phase_flip_x) ** 2)
-        # symmetry_loss_y = torch.mean((slm_phase - slm_phase_flip_y) ** 2)
-        # symmetry_loss = (symmetry_loss_y)
 
-        # Energy inside the target region
-        # loss_energy = 0.2 * (1 - inside_energy_percentage) ** 2
-        loss_energy_horizontal = -1*torch.sum(torch.abs(out_field_horizontal) ** 2)/1e6
-        loss_energy_vertical = -1*torch.sum(torch.abs(out_field_vertical) ** 2)/1e6
-        loss_energy = loss_energy_horizontal + loss_energy_vertical
-        # Weight for symmetry loss
-        symmetry_weight = 1.0  # You can adjust this weight based on importance
+        loss_energy = -1*total_weighted_energy/torch.sum(torch.abs(out_field) ** 2)*1e-1
 
         loss = loss_horizontal + loss_vertical + loss_others_horizontal + loss_others_vertical + loss_tv + loss_energy
-
 
         # Collect loss components for logging
         loss_components = {
@@ -189,7 +184,7 @@ class OpticalSystem(nn.Module):
             'loss_others_vertical': loss_others_vertical.item(),
             'loss_tv': loss_tv.item(),
             'loss_energy': loss_energy.item(),
-            'inside_energy_percentage': inside_energy_percentage.item(),
+            'inside_energy_percentage': total_weighted_energy.item() / torch.sum(torch.abs(out_field) ** 2).item(),
             'overlaps_horizontal': [overlap.item()*100 for overlap in list_overlaps_horizontal],
             'overlaps_vertical': [overlap.item()*100 for overlap in list_overlaps_vertical]
         }
@@ -281,10 +276,10 @@ def optimize_phase_mask(target_mode_nbs, run_name, run_number, data_dir, num_epo
             phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
             writer.add_image('SLM/phase_mask', phase_mask, global_step)
 
-            # # Output field intensity
-            # output_intensity = normalize_image(out_field)
-            # output_intensity = output_intensity[np.newaxis, :, :]
-            # writer.add_image('Field/output_intensity', output_intensity, global_step)
+            # Output field intensity
+            output_intensity = normalize_image(out_field)
+            output_intensity = output_intensity[np.newaxis, :, :]
+            writer.add_image('Field/output_intensity', output_intensity, global_step)
 
             # #cut horizontal and vertical
             # out_field_horizontal = model.out_field_horizontal
@@ -293,10 +288,10 @@ def optimize_phase_mask(target_mode_nbs, run_name, run_number, data_dir, num_epo
             # out_target_vertical = model.target_mode_vertical
             
 
-            # # Target field intensity
-            # target_intensity = normalize_image(model.target_field_horizontal)
-            # target_intensity = target_intensity[np.newaxis, :, :]
-            # writer.add_image('Field/target_intensity_horizontal', target_intensity, global_step)
+            # Target field intensity
+            target_intensity = normalize_image(model.target_field_horizontal)
+            target_intensity = target_intensity[np.newaxis, :, :]
+            writer.add_image('Field/target_intensity_horizontal', target_intensity, global_step)
 
             # target_intensity = normalize_image(model.target_field_vertical)
             # target_intensity = target_intensity[np.newaxis, :, :]
@@ -411,13 +406,14 @@ def run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs, ru
 if __name__ == "__main__":
 
     data_dir = "/data/arouxel"  # You can change this to any directory you want
-    target_modes = [(2,2),(3,3),(3,2), (2,3), (5,3), (3,4),(6,7),(7,6)]  # Add or remove modes as needed
+    target_modes = [(0,1),(1,1)(1,2),(2,2),(3,3),(3,2), (2,3), (5,3), (3,4),(6,7),(7,6)]  # Add or remove modes as needed
     # target_modes = [(1,2)]
     num_runs_per_mode = 5
     num_epochs = 8500  # Set the number of epochs here
-    run_name = "Phase_masks_2D_with_lens"  # Optional: provide a custom run name
+    run_name = "Phase_masks_2D_with_lens_here_we_go_again"  # Optional: provide a custom run name
 
     run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs,run_name)
+
 
 
 
