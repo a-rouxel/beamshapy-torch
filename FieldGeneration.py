@@ -13,7 +13,7 @@ def generate_profile(profile_type, XY_grid,radius=None, parabola_coef=None,angle
         target_intensity = RectangularMask(XY_grid, angle, width, height, position)
         return target_intensity
     elif profile_type == "Sinus":
-        target_intensity = SinusMask(XY_grid, period, angle, phase_offset)
+        target_intensity = SinusMask(XY_grid, period, angle, phase_offset, position)
         return target_intensity
     
 
@@ -90,7 +90,7 @@ def RectangularMask(XY_grid, angle, width, height, position=(0, 0)):
 
     return mask
 
-def SinusMask(XY_grid, period, angle, phase_offset=0):
+def SinusMask(XY_grid, period, angle, phase_offset=0, initial_position=(0, 0)):
     """
     Generates a sinusoidal amplitude array using PyTorch.
 
@@ -99,6 +99,7 @@ def SinusMask(XY_grid, period, angle, phase_offset=0):
         period (float): Period of the sinusoidal amplitude array (in m).
         angle (float): Rotation angle of the sinusoidal amplitude array (in rad).
         phase_offset (float): Phase offset of the sinusoidal amplitude array (in rad).
+        initial_position (tuple): Initial position to shift the grid coordinates (in m).
 
     Returns:
         torch.Tensor: 2D tensor with the mask.
@@ -106,9 +107,13 @@ def SinusMask(XY_grid, period, angle, phase_offset=0):
     angle = torch.tensor(angle)
     phase_offset = torch.tensor(phase_offset)
 
+    # Adjust the grid coordinates by the initial position
+    shifted_X = XY_grid[0] - initial_position[0]
+    shifted_Y = XY_grid[1] - initial_position[1]
+
     cos_angle = torch.cos(angle)
     sin_angle = torch.sin(angle)
-    rotated_X = XY_grid[0] * cos_angle - XY_grid[1] * sin_angle
+    rotated_X = shifted_X * cos_angle - shifted_Y * sin_angle
 
     mask = torch.sin(2 * torch.pi * rotated_X / period + phase_offset)
     return mask
@@ -137,4 +142,129 @@ def generate_target_profiles(yaml_file,XY_grid,list_modes_nb=[]):
         list_target_profiles.append(target_field.field)
 
     return list_target_profiles
+
+
+def generate_target_profiles_specific_modes(yaml_file,XY_grid,list_modes_nb=[],orientation="vertical"):
+
+
+    # width = config["width"]*um
+    list_width = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
+    height = 8*um
+
+
+    list_target_profiles = []
+    for mode_nb in list_modes_nb:
+        width = list_width[mode_nb]
+        if mode_nb %2 == 0:
+            phase_offset = torch.pi/2
+        else:
+            phase_offset = 0
+        sinus_period = 2* width / (1+mode_nb)
+
+        target_field = generate_profile("Rectangle",XY_grid,width=width,height=height)
+        target_field *= generate_profile("Sinus",XY_grid,period=sinus_period,phase_offset=phase_offset)
+
+        if orientation == "vertical":
+            pass
+        elif orientation == "horizontal":
+            target_field = target_field.T
+
+        target_field = ElectricField(torch.abs(target_field), torch.angle(target_field), XY_grid)
+        list_target_profiles.append(target_field.field)
+
+    return list_target_profiles
+
+
+def generate_target_profiles_specific_modes_2D(yaml_file,XY_grid,list_modes_nb=[]):
+
+    config = load_yaml_config(yaml_file)
+
+    # width = config["width"]*um
+    list_width = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
+    list_height = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
+
+
+    list_target_profiles = []
+
+    for mode_nb_x, mode_nb_y in list_modes_nb:
+        width = list_width[mode_nb_x]
+        height = list_height[mode_nb_y]
+
+        if mode_nb_x %2 == 0:
+            phase_offset_x = torch.pi/2
+        else:
+            phase_offset_x = 0
+        if mode_nb_y %2 == 0:
+            phase_offset_y = torch.pi/2
+        else:
+            phase_offset_y = 0
+        sinus_period_x = 2* width / (1+mode_nb_x)
+        sinus_period_y = 2* height / (1+mode_nb_y)
+
+        target_field = generate_profile("Rectangle",XY_grid,width=width,height=height)
+        target_field *= generate_profile("Sinus",XY_grid,period=sinus_period_x,phase_offset=phase_offset_x)
+        target_field *= generate_profile("Sinus",XY_grid,period=sinus_period_y,phase_offset=phase_offset_y)
+
+        target_field = ElectricField(torch.abs(target_field), torch.angle(target_field), XY_grid)
+        list_target_profiles.append(target_field.field)
+
+        plt.imshow(torch.abs(target_field).detach().numpy())
+        plt.show()
+
+    return list_target_profiles
+
+
+
+def generate_target_profiles_shifted(yaml_file,XY_grid,position_shift,list_modes_nb=[]):
+
+    config = load_yaml_config(yaml_file)
+
+    width = config["width"]*um
+    height = config["height"]*um
+
+
+    list_target_profiles = []
+    for mode_nb in list_modes_nb:
+        if mode_nb %2 == 0:
+            phase_offset = torch.pi/2
+        else:
+            phase_offset = 0
+        sinus_period = 2* width / (1+mode_nb)
+
+        target_field = generate_profile("Rectangle",XY_grid,width=width,height=height,position=position_shift)
+        target_field *= generate_profile("Sinus",XY_grid,period=sinus_period,phase_offset=phase_offset,position=position_shift)
+
+        target_field = ElectricField(torch.abs(target_field), torch.angle(target_field), XY_grid)
+        list_target_profiles.append(target_field.field)
+
+    return list_target_profiles
+
+
+def generate_target_profile_CRIGF(list_mode_nb=(2,2),XY_grid=None):
+
+
+
+    list_width = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
+    list_height = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
+
+
+    mode_nb_x = list_mode_nb[0]
+    mode_nb_y = list_mode_nb[1]
+
+
+    list_target_profiles = []
+
+    width = list_width[mode_nb_x]
+    height = list_height[mode_nb_y]
+
+
+
+    target_field = generate_profile("Rectangle",XY_grid,width=width,height=height)
+
+    target_field = ElectricField(torch.abs(target_field), torch.angle(target_field), XY_grid)
+    list_target_profiles.append(target_field.field)
+
+    return list_target_profiles
+
+
 
