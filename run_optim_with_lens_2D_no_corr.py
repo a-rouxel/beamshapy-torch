@@ -410,12 +410,12 @@ def run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs, ru
 
 if __name__ == "__main__":
 
-    data_dir = "./results"  # You can change this to any directory you want
-    target_modes = [(2,2),(3,3),(3,2), (2,3), (4,3), (3,4)]  # Add or remove modes as needed
+    data_dir = "/data/arouxel"  # You can change this to any directory you want
+    target_modes = [(2,2),(3,3),(3,2), (2,3), (5,3), (3,4),(6,7),(7,6)]  # Add or remove modes as needed
     # target_modes = [(1,2)]
     num_runs_per_mode = 5
-    num_epochs = 5000  # Set the number of epochs here
-    run_name = "Phase_masks_2D_with_lens"  # Optional: provide a custom run name
+    num_epochs = 8500  # Set the number of epochs here
+    run_name = "Phase_masks_2D_with_lens_new_losses"  # Optional: provide a custom run name
 
     run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs)
 
