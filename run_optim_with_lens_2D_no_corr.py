@@ -271,15 +271,15 @@ def optimize_phase_mask(target_mode_nbs, run_name, run_number, data_dir, num_epo
 
             # Log images
             # Phase mask
-            phase_mask = model.slm.phase.detach().cpu().numpy()
-            phase_mask = (phase_mask - phase_mask.min()) / (phase_mask.max() - phase_mask.min() + 1e-8)
-            phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
-            writer.add_image('SLM/phase_mask', phase_mask, global_step)
+            # phase_mask = model.slm.phase.detach().cpu().numpy()
+            # phase_mask = (phase_mask - phase_mask.min()) / (phase_mask.max() - phase_mask.min() + 1e-8)
+            # phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
+            # writer.add_image('SLM/phase_mask', phase_mask, global_step)
 
-            # Output field intensity
-            output_intensity = normalize_image(out_field)
-            output_intensity = output_intensity[np.newaxis, :, :]
-            writer.add_image('Field/output_intensity', output_intensity, global_step)
+            # # Output field intensity
+            # output_intensity = normalize_image(out_field)
+            # output_intensity = output_intensity[np.newaxis, :, :]
+            # writer.add_image('Field/output_intensity', output_intensity, global_step)
 
             # #cut horizontal and vertical
             # out_field_horizontal = model.out_field_horizontal
@@ -289,9 +289,9 @@ def optimize_phase_mask(target_mode_nbs, run_name, run_number, data_dir, num_epo
             
 
             # Target field intensity
-            target_intensity = normalize_image(model.target_field_horizontal)
-            target_intensity = target_intensity[np.newaxis, :, :]
-            writer.add_image('Field/target_intensity_horizontal', target_intensity, global_step)
+            # target_intensity = normalize_image(model.target_field_horizontal)
+            # target_intensity = target_intensity[np.newaxis, :, :]
+            # writer.add_image('Field/target_intensity_horizontal', target_intensity, global_step)
 
             # target_intensity = normalize_image(model.target_field_vertical)
             # target_intensity = target_intensity[np.newaxis, :, :]
