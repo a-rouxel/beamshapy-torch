@@ -281,16 +281,16 @@ def optimize_phase_mask(target_mode_nbs, run_name, run_number, data_dir, num_epo
             phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
             writer.add_image('SLM/phase_mask', phase_mask, global_step)
 
-            # Output field intensity
-            output_intensity = normalize_image(out_field)
-            output_intensity = output_intensity[np.newaxis, :, :]
-            writer.add_image('Field/output_intensity', output_intensity, global_step)
+            # # Output field intensity
+            # output_intensity = normalize_image(out_field)
+            # output_intensity = output_intensity[np.newaxis, :, :]
+            # writer.add_image('Field/output_intensity', output_intensity, global_step)
 
-            #cut horizontal and vertical
-            out_field_horizontal = model.out_field_horizontal
-            out_field_vertical = model.out_field_vertical
-            out_target_horizontal = model.target_mode_horizontal
-            out_target_vertical = model.target_mode_vertical
+            # #cut horizontal and vertical
+            # out_field_horizontal = model.out_field_horizontal
+            # out_field_vertical = model.out_field_vertical
+            # out_target_horizontal = model.target_mode_horizontal
+            # out_target_vertical = model.target_mode_vertical
             
 
             # # Target field intensity
@@ -307,43 +307,43 @@ def optimize_phase_mask(target_mode_nbs, run_name, run_number, data_dir, num_epo
             # plt.close(fig)
 
             # Compare 1D plots
-            out_field_horizontal = model.out_field_horizontal.detach().cpu().numpy()
-            out_field_vertical = model.out_field_vertical.detach().cpu().numpy()
-            target_field_horizontal = model.target_field_horizontal.sum(dim=0).detach().cpu().numpy()
-            target_field_vertical = model.target_field_vertical.sum(dim=1).detach().cpu().numpy()
+            # out_field_horizontal = model.out_field_horizontal.detach().cpu().numpy()
+            # out_field_vertical = model.out_field_vertical.detach().cpu().numpy()
+            # target_field_horizontal = model.target_field_horizontal.sum(dim=0).detach().cpu().numpy()
+            # target_field_vertical = model.target_field_vertical.sum(dim=1).detach().cpu().numpy()
 
-            # Normalize the fields
-            out_field_horizontal = np.abs(out_field_horizontal) / np.max(np.abs(out_field_horizontal))
-            out_field_vertical = np.abs(out_field_vertical) / np.max(np.abs(out_field_vertical))
-            target_field_horizontal = np.abs(target_field_horizontal) / np.max(np.abs(target_field_horizontal))
-            target_field_vertical = np.abs(target_field_vertical) / np.max(np.abs(target_field_vertical))
+            # # Normalize the fields
+            # out_field_horizontal = np.abs(out_field_horizontal) / np.max(np.abs(out_field_horizontal))
+            # out_field_vertical = np.abs(out_field_vertical) / np.max(np.abs(out_field_vertical))
+            # target_field_horizontal = np.abs(target_field_horizontal) / np.max(np.abs(target_field_horizontal))
+            # target_field_vertical = np.abs(target_field_vertical) / np.max(np.abs(target_field_vertical))
 
-            # Create comparison plots
-            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
+            # # Create comparison plots
+            # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 10))
 
-            # Horizontal comparison
-            ax1.plot(out_field_horizontal, label='Output')
-            ax1.plot(target_field_horizontal, label='Target')
-            ax1.set_xlim(800,1200)
-            ax1.set_title(f'Horizontal Comparison (Epoch {epoch})')
-            ax1.legend()
-            ax1.set_xlabel('Position')
-            ax1.set_ylabel('Normalized Intensity')
+            # # Horizontal comparison
+            # ax1.plot(out_field_horizontal, label='Output')
+            # ax1.plot(target_field_horizontal, label='Target')
+            # ax1.set_xlim(800,1200)
+            # ax1.set_title(f'Horizontal Comparison (Epoch {epoch})')
+            # ax1.legend()
+            # ax1.set_xlabel('Position')
+            # ax1.set_ylabel('Normalized Intensity')
 
-            # Vertical comparison
-            ax2.plot(out_field_vertical, label='Output')
-            ax2.plot(target_field_vertical, label='Target')
-            ax2.set_xlim(800,1200)
-            ax2.set_title(f'Vertical Comparison (Epoch {epoch})')
-            ax2.legend()
-            ax2.set_xlabel('Position')
-            ax2.set_ylabel('Normalized Intensity')
+            # # Vertical comparison
+            # ax2.plot(out_field_vertical, label='Output')
+            # ax2.plot(target_field_vertical, label='Target')
+            # ax2.set_xlim(800,1200)
+            # ax2.set_title(f'Vertical Comparison (Epoch {epoch})')
+            # ax2.legend()
+            # ax2.set_xlabel('Position')
+            # ax2.set_ylabel('Normalized Intensity')
 
-            plt.tight_layout()
-            plt.close(fig)
+            # plt.tight_layout()
+            # plt.close(fig)
 
-            # Log the comparison plot to TensorBoard
-            writer.add_figure('Comparison/1D_plots', fig, global_step)
+            # # Log the comparison plot to TensorBoard
+            # writer.add_figure('Comparison/1D_plots', fig, global_step)
 
     # Return the final results
     final_overlaps_horizontal = loss_components['overlaps_horizontal']
@@ -415,9 +415,9 @@ if __name__ == "__main__":
     # target_modes = [(1,2)]
     num_runs_per_mode = 5
     num_epochs = 8500  # Set the number of epochs here
-    run_name = "Phase_masks_2D_with_lens_new_losses"  # Optional: provide a custom run name
+    run_name = "Phase_masks_2D_with_lens"  # Optional: provide a custom run name
 
-    run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs)
+    run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs,run_name)
 
 
 
