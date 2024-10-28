@@ -61,7 +61,7 @@ class OpticalSystem(nn.Module):
 
     def forward(self, source_field,epoch):
         # Apply the SLM phase modulation
-        modulated_field = self.slm.apply_phase_modulation_sigmoid(source_field,steepness=2 + epoch/200,num_terms=1, spacing=1,mode_parity="even")
+        modulated_field = self.slm.apply_phase_modulation_sigmoid(source_field,steepness=2 + epoch/200,num_terms=1, spacing=1,mode_parity=self.mode_parity)
 
         # Propagate the field
         out_field = self.ft_lens(modulated_field, pad=False, flag_ifft=False)
@@ -239,15 +239,15 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number, data_dir, num_epoc
 
             # Log images
             # Phase mask
-            phase_mask = model.slm.phase.detach().cpu().numpy()
-            phase_mask = (phase_mask - phase_mask.min()) / (phase_mask.max() - phase_mask.min() + 1e-8)
-            phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
-            writer.add_image('SLM/phase_mask', phase_mask, global_step)
+            # phase_mask = model.slm.phase.detach().cpu().numpy()
+            # phase_mask = (phase_mask - phase_mask.min()) / (phase_mask.max() - phase_mask.min() + 1e-8)
+            # phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
+            # writer.add_image('SLM/phase_mask', phase_mask, global_step)
 
-            # Output field intensity
-            output_intensity = normalize_image(out_field)
-            output_intensity = output_intensity[np.newaxis, :, :]
-            writer.add_image('Field/output_intensity', output_intensity, global_step)
+            # # Output field intensity
+            # output_intensity = normalize_image(out_field)
+            # output_intensity = output_intensity[np.newaxis, :, :]
+            # writer.add_image('Field/output_intensity', output_intensity, global_step)
 
             # # Target field intensity
             # target_intensity = normalize_image(model.target_field)

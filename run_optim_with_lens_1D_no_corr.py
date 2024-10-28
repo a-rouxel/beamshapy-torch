@@ -8,7 +8,7 @@ from simulation import Simulation
 from sources import Source
 from slm import SLM
 from ft_lens import FT_Lens, propagate_and_collect_side_view
-from FieldGeneration import generate_target_profiles_specific_modes
+from FieldGeneration import generate_target_profiles_specific_modes, generate_target_profile_CRIGF
 from cost_functions import calculate_normalized_overlap
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
@@ -44,20 +44,29 @@ class OpticalSystem(nn.Module):
         else:
             self.mode_parity = "odd"
         self.with_minimize_losses = with_minimize_losses
-        self.list_target_files = generate_target_profiles_specific_modes(yaml_file="./configs/target_profile.yml",
+
+        self.list_target_files_0 = generate_target_profiles_specific_modes(yaml_file="./configs/target_profile.yml",
                                                      XY_grid=self.ft_lens.XY_output_grid,
-                                                     list_modes_nb=[0,1,2,3,4,5,6,7])
-        # Move target fields to device
-        self.list_target_files = [field.to(self.device) for field in self.list_target_files]
-        self.target_field = self.list_target_files[self.target_mode]
+                                                     list_modes_nb=[0,1,2,3,4,5,6,7],orientation="vertical")
+
+        
+        self.CRIGF_shape = generate_target_profile_CRIGF(list_mode_nb=(target_mode_nb,target_mode_nb),XY_grid=self.ft_lens.XY_output_grid).to(self.device)
+
+
+        self.list_target_files_vertical = [field.to(self.device) for field in self.list_target_files_0]
+        self.list_target_fields_vertical_sum = [torch.sum(field,dim=1) for field in self.list_target_files_vertical]
+
+
+        self.target_field_vertical = self.list_target_files_vertical[self.target_mode]
 
         self.slm = SLM(config_dict=self.config_slm, XY_grid=self.simulation.XY_grid)
 
         # Replace the hypergaussian_weights call with the new method
         self.weights_map = self.create_target_based_weights(
-            self.target_field,
+            self.CRIGF_shape,
             sigma=2  # Adjust this value to control the Gaussian blur
         ).to(self.device)
+
 
     def forward(self, source_field,epoch):
         # Apply the SLM phase modulation
@@ -96,44 +105,57 @@ class OpticalSystem(nn.Module):
         return kernel.outer(kernel)
 
     def compute_loss(self, out_field, list_target_field, epoch):
-        energy_out = torch.sum(torch.abs(out_field) ** 2)
-        energy_out = energy_out + 1e-10  # Avoid divide by zero
-
         # Apply the weight map to the fields
-        weighted_out_field = out_field * self.weights_map
+        weighted_out_field = out_field
 
-        inside_energy_percentage = torch.sum(torch.abs(weighted_out_field) ** 2) / energy_out
+        # Calculate total energy of the weighted output field
+        total_weighted_energy = torch.sum(torch.abs(weighted_out_field) ** 2)
+        inside_energy = torch.sum(torch.abs(out_field * self.weights_map) ** 2)
 
-        list_overlaps = []
-        for idx, target_field in enumerate(list_target_field):
-            # energy_target = torch.sum(torch.abs(target_field))
-            # target_field_norm = target_field * energy_out / energy_target
+        # Find rows and columns where weights_map > 1e-3
+        # cols_to_consider = torch.any(self.weights_map > 1e-1, dim=0)
 
-            # weighted_target_field = target_field_norm * self.weights_map
-            overlap = calculate_normalized_overlap(out_field, target_field)
-            list_overlaps.append(overlap)
+        # Vectorized overlap calculation
+        out_cols = weighted_out_field[:, :]  # [height, selected_cols]
+        list_overlaps_vertical = []
+        
+        for target_field_vertical in list_target_field:
+            # Expand target field to match output dimensions
+            target_cols = target_field_vertical.unsqueeze(1).expand_as(out_cols)  # [height, selected_cols]
+            
+            # Calculate normalized overlaps for all columns at once
+            numerator = torch.abs(torch.sum(out_cols.conj() * target_cols, dim=0)) ** 2
+            denominator = (torch.sum(torch.abs(out_cols) ** 2, dim=0) * 
+                         torch.sum(torch.abs(target_cols) ** 2, dim=0))
+            array_overlaps_v = numerator / (denominator + 1e-7)
+            
+            # Calculate column energies and weighted overlap
+            col_energies = torch.sum(torch.abs(out_cols) ** 2, dim=0)
+            weighted_overlap_vertical = torch.sum(array_overlaps_v * col_energies)
+            
+            # Normalize the weighted overlap
+            normalized_overlap_vertical = weighted_overlap_vertical / total_weighted_energy
+            list_overlaps_vertical.append(normalized_overlap_vertical)
 
-        loss1 = -torch.log(list_overlaps[self.target_mode] + 1e-10)
+        # Convert list to tensor for more efficient operations
+        all_overlaps = torch.stack(list_overlaps_vertical)
+        
+        # Target mode loss
+        loss_vertical = -torch.log(all_overlaps[self.target_mode] + 1e-10)
+        self.target_mode_vertical = all_overlaps[self.target_mode]
 
-        # Exclude the target mode from the overlaps
-        other_overlaps = [overlap for idx, overlap in enumerate(list_overlaps) if idx != self.target_mode]
-        max_other_overlap = torch.max(torch.stack(other_overlaps))
+        # Create mask for other modes
+        mask = torch.ones_like(all_overlaps, dtype=torch.bool)
+        mask[self.target_mode] = False
+        max_other_overlap_vertical = torch.max(all_overlaps[mask])
 
-        loss2 = -epoch * torch.log(1 - max_other_overlap + 1e-10)
+        # Loss for other modes
+        loss_others_vertical = -100 * torch.log(1 - max_other_overlap_vertical + 1e-7)
 
         # Total Variation (TV) regularization for smoothness
         diff_dim0 = torch.diff(self.slm.phase, dim=0) ** 2
         diff_dim1 = torch.diff(self.slm.phase, dim=1) ** 2
 
-        # Pad the differences to match original size
-        diff_dim0_padded = nn.functional.pad(diff_dim0, (0, 0, 0, 1), 'constant', 0)
-        diff_dim1_padded = nn.functional.pad(diff_dim1, (0, 1, 0, 0), 'constant', 0)
-
-        TV_term = torch.sum(torch.sqrt(diff_dim0_padded + diff_dim1_padded + 1e-2))
-        loss3 = TV_term * 5e-6 * (50 / (epoch + 1))
-        # loss3 = torch.tensor(0, device=self.device)
-
-            # Symmetry loss
         slm_phase = self.slm.phase
         # slm_phase_flip_x = torch.flip(slm_phase, dims=[0])  # Flip along the X axis
         slm_phase_flip_y = torch.flip(slm_phase, dims=[1])  # Flip along the Y axis
@@ -141,27 +163,28 @@ class OpticalSystem(nn.Module):
         symmetry_loss_y = torch.mean((slm_phase - slm_phase_flip_y) ** 2)
         symmetry_loss = (symmetry_loss_y)
 
-        # Energy inside the target region
-        loss4 = 0.2 * (1 - inside_energy_percentage) ** 2
+        # Pad the differences to match original size
+        diff_dim0_padded = nn.functional.pad(diff_dim0, (0, 0, 0, 1), 'constant', 0)
+        diff_dim1_padded = nn.functional.pad(diff_dim1, (0, 1, 0, 0), 'constant', 0)
 
-        # Weight for symmetry loss
-        symmetry_weight = 1.0  # You can adjust this weight based on importance
+        TV_term = torch.sum(torch.sqrt(diff_dim0_padded + diff_dim1_padded + 1e-2))
+        loss_tv = TV_term * 5e-6 * (50 / (epoch*0.01 + 1))
 
-        if self.with_minimize_losses:
-            loss = loss1 + loss2 + loss3 + loss4 + symmetry_weight * symmetry_loss
-        else:
-            loss = loss1 + loss2 + loss3 + symmetry_weight * symmetry_loss
+        # Energy loss
+        loss_energy = -10 * inside_energy / torch.sum(torch.abs(out_field) ** 2)
+
+        # Combine all losses 
+        loss = loss_vertical + loss_others_vertical + loss_tv + loss_energy + symmetry_loss
 
         # Collect loss components for logging
         loss_components = {
             'total_loss': loss.item(),
-            'loss1': loss1.item(),
-            'loss2': loss2.item(),
-            'loss3': loss3.item(),
-            'loss4': loss4.item(),
-            'symmetry_loss': symmetry_loss.item()*symmetry_weight,
-            'inside_energy_percentage': inside_energy_percentage.item(),
-            'list_overlaps': [overlap.item()*100 for overlap in list_overlaps]
+            'loss_vertical': loss_vertical.item(),
+            'loss_others_vertical': loss_others_vertical.item(),
+            'loss_tv': loss_tv.item(),
+            'loss_energy': loss_energy.item(),
+            'inside_energy_percentage': inside_energy.item() / torch.sum(torch.abs(out_field) ** 2).item(),
+            'overlaps_vertical': [overlap.item() for overlap in all_overlaps]
         }
 
         return loss, loss_components
@@ -205,7 +228,7 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number, data_dir, num_epoc
         out_field = model(source_field, epoch)
 
         # Compute loss
-        loss, loss_components = model.compute_loss(out_field, model.list_target_files, epoch)
+        loss, loss_components = model.compute_loss(out_field, model.list_target_fields_vertical_sum, epoch)
 
         # Backward pass and optimization
         loss.backward()
@@ -216,17 +239,15 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number, data_dir, num_epoc
         global_step = epoch
 
         # Log scalars with more descriptive names
-        writer.add_scalar('Loss/Total', loss.item(), global_step)
-        writer.add_scalar('Loss/Target Mode Overlap', loss_components['loss1'], global_step)
-        writer.add_scalar('Loss/Other Modes Suppression', loss_components['loss2'], global_step)
-        writer.add_scalar('Loss/Phase Smoothness (TV)', loss_components['loss3'], global_step)
-        writer.add_scalar('Loss/Energy Confinement', loss_components['loss4'], global_step)
-        writer.add_scalar('Loss/Symmetry', loss_components['symmetry_loss'], global_step)
+        writer.add_scalar('Loss/Total', loss_components['total_loss'], global_step)
+        writer.add_scalar('Loss/Vertical', loss_components['loss_vertical'], global_step)
+        writer.add_scalar('Loss/Others_Vertical', loss_components['loss_others_vertical'], global_step)
+        writer.add_scalar('Loss/TV', loss_components['loss_tv'], global_step)
+        writer.add_scalar('Loss/Energy', loss_components['loss_energy'], global_step)
         writer.add_scalar('Metrics/Inside Energy Percentage', loss_components['inside_energy_percentage'], global_step)
 
-        # Log overlaps with mode numbers
-        for idx, overlap in enumerate(loss_components['list_overlaps']):
-            writer.add_scalar(f'Overlap/Mode {idx}', overlap, global_step)
+        for idx, overlap in enumerate(loss_components['overlaps_vertical']):
+            writer.add_scalar(f'Overlap/Vertical Mode {idx}', overlap, global_step)
 
         # Update progress bar description with current loss
         pbar.set_postfix({'loss': f'{loss.item():.4f}'})
@@ -239,15 +260,15 @@ def optimize_phase_mask(target_mode_nb, run_name, run_number, data_dir, num_epoc
 
             # Log images
             # Phase mask
-            # phase_mask = model.slm.phase.detach().cpu().numpy()
-            # phase_mask = (phase_mask - phase_mask.min()) / (phase_mask.max() - phase_mask.min() + 1e-8)
-            # phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
-            # writer.add_image('SLM/phase_mask', phase_mask, global_step)
+            phase_mask = model.slm.phase.detach().cpu().numpy()
+            phase_mask = (phase_mask - phase_mask.min()) / (phase_mask.max() - phase_mask.min() + 1e-8)
+            phase_mask = phase_mask[np.newaxis, :, :]  # Add channel dimension
+            writer.add_image('SLM/phase_mask', phase_mask, global_step)
 
-            # # Output field intensity
-            # output_intensity = normalize_image(out_field)
-            # output_intensity = output_intensity[np.newaxis, :, :]
-            # writer.add_image('Field/output_intensity', output_intensity, global_step)
+            # Output field intensity
+            output_intensity = normalize_image(out_field)
+            output_intensity = output_intensity[np.newaxis, :, :]
+            writer.add_image('Field/output_intensity', output_intensity, global_step)
 
             # # Target field intensity
             # target_intensity = normalize_image(model.target_field)
@@ -377,9 +398,11 @@ def visualize_weights_map(model):
 if __name__ == "__main__":
 
     data_dir = "/data/arouxel"  # You can change this to any directory you want
-    target_modes = [0,1,2, 3, 4, 5, 6, 7]  # Add or remove modes as needed
+    target_modes = [1,2,3, 4, 5, 6, 7]  # Add or remove modes as needed
     num_runs_per_mode = 5
     num_epochs = 8200  # Set the number of epochs here
     run_name = "Phase_masks_1D_with_lens"  # Optional: provide a custom run name
 
     run_multiple_tests(data_dir, target_modes, num_runs_per_mode, num_epochs, run_name)
+
+

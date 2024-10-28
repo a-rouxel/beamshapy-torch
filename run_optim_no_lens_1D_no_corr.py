@@ -54,6 +54,7 @@ class OpticalSystem(nn.Module):
             XY_grid=self.simulation.XY_grid,
             list_modes_nb=[0, 1, 2, 3, 4, 5, 6, 7]
         )
+        
         # Move target fields to device
         self.list_target_files = [field.to(self.device) for field in self.list_target_files]
         self.target_field = self.list_target_files[self.target_mode]
