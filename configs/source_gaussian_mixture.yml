@@ -1,0 +1,20 @@
+type: "gaussian mixture"
+num gaussian: 3
+wavelength: 850  # in nm
+power: 1.0  # arbitrary units
+
+# Optional: path to load parameters from JSON
+parameters_file: "gaussian_mixture_parameters.json"
+
+# Zernike coefficients for phase generation
+zernike_coefficients:
+  "(0,0)": -0.227   # Piston
+  "(1,-1)": 0.011   # Tilt Y
+  "(1,1)": 0.031    # Tilt X
+  "(2,-2)": -0.022  # Astigmatism ±45°
+  "(2,0)": 0.23     # Defocus
+  "(2,2)": -0.003   # Astigmatism 0/90°
+  "(3,-3)": 0.004   # Trefoil Y
+  "(3,-1)": 0.001   # Coma Y
+  "(3,1)": -0.001   # Coma X
+  "(3,3)": -0.009   # Trefoil X

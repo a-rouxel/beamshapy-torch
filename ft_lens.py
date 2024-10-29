@@ -95,7 +95,7 @@ def create_binary_fresnel_lens_new(grid_size, feature_size, wavelength, focal_le
 class FT_Lens(nn.Module):
     def __init__(self,delta_x_in, XY_input_grid, wavelength):
         super().__init__()
-        self.focal_length = nn.Parameter(torch.tensor(20* mm) )
+        self.focal_length = nn.Parameter(torch.tensor(18.4* mm) )
         self.focal_length.requires_grad = False
         self.delta_x_in = delta_x_in
         self.XY_input_grid = XY_input_grid

@@ -144,17 +144,21 @@ def generate_target_profiles(yaml_file,XY_grid,list_modes_nb=[]):
     return list_target_profiles
 
 
-def generate_target_profiles_specific_modes(yaml_file,XY_grid,list_modes_nb=[],orientation="vertical"):
+def generate_target_profiles_specific_modes(XY_grid,list_modes_nb=[],orientation="vertical"):
 
 
     # width = config["width"]*um
     list_width = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
-    height = 8*um
+    list_height = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
 
+    list_width = [x*28.5/30 for x in list_width]
+    list_height = [x*28.5/30 for x in list_height]
 
     list_target_profiles = []
     for mode_nb in list_modes_nb:
         width = list_width[mode_nb]
+        height = list_height[mode_nb]
+        
         if mode_nb %2 == 0:
             phase_offset = torch.pi/2
         else:
@@ -175,18 +179,19 @@ def generate_target_profiles_specific_modes(yaml_file,XY_grid,list_modes_nb=[],o
     return list_target_profiles
 
 
-def generate_target_profiles_specific_modes_2D(yaml_file,XY_grid,list_modes_nb=[]):
+def generate_target_profiles_specific_modes_2D(XY_grid,list_modes_nbs=[]):
 
-    config = load_yaml_config(yaml_file)
 
     # width = config["width"]*um
     list_width = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
     list_height = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
 
+    list_width = [x*28.5/30 for x in list_width]
+    list_height = [x*28.5/30 for x in list_height]
 
     list_target_profiles = []
 
-    for mode_nb_x, mode_nb_y in list_modes_nb:
+    for mode_nb_x, mode_nb_y in list_modes_nbs:
         width = list_width[mode_nb_x]
         height = list_height[mode_nb_y]
 
@@ -203,19 +208,16 @@ def generate_target_profiles_specific_modes_2D(yaml_file,XY_grid,list_modes_nb=[
 
         target_field = generate_profile("Rectangle",XY_grid,width=width,height=height)
         target_field *= generate_profile("Sinus",XY_grid,period=sinus_period_x,phase_offset=phase_offset_x)
-        target_field *= generate_profile("Sinus",XY_grid,period=sinus_period_y,phase_offset=phase_offset_y)
+        target_field *= generate_profile("Sinus",XY_grid,period=sinus_period_y,phase_offset=phase_offset_y,angle=torch.pi/2)
 
         target_field = ElectricField(torch.abs(target_field), torch.angle(target_field), XY_grid)
         list_target_profiles.append(target_field.field)
-
-        plt.imshow(torch.abs(target_field).detach().numpy())
-        plt.show()
 
     return list_target_profiles
 
 
 
-def generate_target_profiles_shifted(yaml_file,XY_grid,position_shift,list_modes_nb=[]):
+def generate_target_profiles_shifted(XY_grid,position_shift,list_modes_nb=[]):
 
     config = load_yaml_config(yaml_file)
 
@@ -247,6 +249,8 @@ def generate_target_profile_CRIGF(list_mode_nb=(2,2),XY_grid=None):
     list_width = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
     list_height = [61.5*um,61.5*um,61.5*um,61.5*um,60.5*um,60.0*um,59.0*um,58.5*um,57.5*um,57.0*um]
 
+    list_width = [x*28.5/30 for x in list_width]
+    list_height = [x*28.5/30 for x in list_height]
 
     mode_nb_x = list_mode_nb[0]
     mode_nb_y = list_mode_nb[1]

@@ -177,7 +177,7 @@ def compute_loss_discretization(self, out_field, list_target_field,n_levels=4):
     return loss, list_overlaps
 
 
-def generalized_sigmoid_function(x, steepness=20, num_terms=3, spacing=0.5,mode_parity="even"):
+def generalized_sigmoid_function(x, steepness=20, num_terms=3, spacing=0.5):
 
     # Calculate shifts
     if num_terms % 2 == 0:
@@ -196,11 +196,6 @@ def generalized_sigmoid_function(x, steepness=20, num_terms=3, spacing=0.5,mode_
     expected_max_result = 2 * torch.pi * (1 - 1 / (num_terms+1))
     max_result = torch.max(result)
     result = result * expected_max_result / max_result
-
-    if mode_parity == "odd":
-        result = result - torch.pi/2
-    elif mode_parity == "even":
-        result = result
 
     return result
 

@@ -12,12 +12,12 @@ from PIL import Image
 
 
 class Source(nn.Module):
-    def __init__(self, config_dict= None,XY_grid= None):
+    def __init__(self, config_dict= None,XY_grid= None,wavelength=None):
         super().__init__()
         self.config_dict = config_dict
         self.type = self.config_dict["type"]
         self.num_gaussians = self.config_dict["num gaussian"]
-        self.wavelength = self.config_dict["wavelength"]*nm
+        self.wavelength = wavelength*nm
         self.initial_power = self.config_dict["power"]
         self.init_amp = 1
         self.XY_grid = XY_grid
@@ -26,7 +26,7 @@ class Source(nn.Module):
         self.amplitudes.requires_grad = False
         self.means = nn.Parameter(torch.zeros(self.num_gaussians, 2) * mm)
         self.means.requires_grad = False
-        self.sigmas = nn.Parameter(torch.ones(self.num_gaussians) * 1.2* mm)
+        self.sigmas = nn.Parameter(torch.ones(self.num_gaussians) * 1.205* mm)
         self.sigmas.requires_grad = False
         self.phase = nn.Parameter(torch.zeros(XY_grid[0].shape))
         self.phase.requires_grad = False
